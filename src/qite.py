@@ -441,7 +441,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
         expectation_values={}
         if backend=='statevector_simulator':
             ## Run circuit to get state vector
-            psi=run_circuit_statevector(n_qubits,A_set,initialization=None)
+            psi=run_circuit_statevector(n_qubits,A_set,initialization=initialization)
 
             ## Compute expectation value for each pauli term 
             for pauli_id in commuting_sets:        
@@ -459,7 +459,8 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
                 for pauli in commuting_sets[pauli_id]: 
                     expectation_values[pauli]=compute_expectation_value(pauli,meas_results)    
 
-
+        # print("expectation values")
+        # print(expectation_values)
         ## Compute energy
         H_pauli=H.pauli_coeffs
         for key in H_pauli:
