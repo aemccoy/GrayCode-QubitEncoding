@@ -361,7 +361,7 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
         for term in bI:
             b[sigma_idx]+=bI[term]*expectation_values[term]
 
-    b=b/Ccoef
+    b=b/np.sqrt(Ccoef)
           
     ## Comput S
     Smatrix=np.asmatrix(np.zeros((num_sigmas,num_sigmas)))
@@ -465,8 +465,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
             Energies[t]+=H_pauli[key]*expectation_values[key]
 
         ## compute normalization coef C=1-2*E*delta_times
-        ## Using TM approx: 1/sqrt(C) approx 1-E*delta_time
-        Ccoef=1-delta_time*Energies[t]
+        Ccoef=1-2*delta_time*Energies[t]
         Ccoefs[t]=Ccoef
         ## Compute A
         A_set.append(A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold))
