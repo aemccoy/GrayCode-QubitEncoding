@@ -168,6 +168,7 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 def compute_expectation_value(pauli,meas_results):
     """
     Compute expectation value of pauli operator using counts obtained by running qiskit circuit
+    Assumes pauli is in qiskit order (right to left)
 
     """
     pauli_list = list(pauli)
