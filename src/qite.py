@@ -16,45 +16,45 @@ from qiskit_circuits import *
 
 import itertools
 
-def commutes(a,b):
-    """
-    Returns true if two operators commute
+# def commutes(a,b):
+#     """
+#     Returns true if two operators commute
     
-    input:
-        a,b (str) : Pauli operators.  Must be "X", "Y", "Z", "I"
-    """
-    #Todo add raise error if a[i] not in allowed pauli set
-    does_commute=True
-    for i in range(len(a)):
-        ## If ai or bi are identity then ith paulis will commute 
-        if a[i]=='I' or b[i]=='I':
-            continue
+#     input:
+#         a,b (str) : Pauli operators.  Must be "X", "Y", "Z", "I"
+#     """
+#     #Todo add raise error if a[i] not in allowed pauli set
+#     does_commute=True
+#     for i in range(len(a)):
+#         ## If ai or bi are identity then ith paulis will commute 
+#         if a[i]=='I' or b[i]=='I':
+#             continue
         
-        ## if ai != bi then they won't commute 
-        if a[i]!=b[i]:
-            does_commute=False
-            break
+#         ## if ai != bi then they won't commute 
+#         if a[i]!=b[i]:
+#             does_commute=False
+#             break
 
-    return does_commute
+#     return does_commute
 
 
-def get_pauli_terms(weighted_pauli):
-    """
-    Extract out individual paul terms 
+# def get_pauli_terms(weighted_pauli):
+#     """
+#     Extract out individual paul terms 
     
-    Input:
-        weighted_pauli ():
+#     Input:
+#         weighted_pauli ():
         
-    Return
-        terms (dictionary) : dictionary of {label:coef} for each pauli term. 
-                label is pauli string
-    """
-    terms={}
-    for term in weighted_pauli.to_dict()['paulis']:
-        label=term['label']
-        coef=term['coeff']['real']+1j*term['coeff']['imag']
-        terms[label]=coef
-    return terms
+#     Return
+#         terms (dictionary) : dictionary of {label:coef} for each pauli term. 
+#                 label is pauli string
+#     """
+#     terms={}
+#     for term in weighted_pauli.to_dict()['paulis']:
+#         label=term['label']
+#         coef=term['coeff']['real']+1j*term['coeff']['imag']
+#         terms[label]=coef
+#     return terms
 
 
 def get_sigma_pauli_terms(n_qubits):
@@ -165,21 +165,22 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
     return pauli_set
 
-def compute_expectation_value(pauli,meas_results):
-    """
-    Compute expectation value of pauli operator using counts obtained by running qiskit circuit
-    Assumes pauli is in qiskit order (right to left)
+# def compute_expectation_value(pauli,meas_results):
+#     """
+#     Compute expectation value of pauli operator using counts obtained by running qiskit circuit
+#     Assumes pauli is in qiskit order (right to left)
 
-    """
-    pauli_list = list(pauli)
-    n_qubits = len(pauli_list)
-    expectation_value=0.0
-    for basis_state in meas_results.keys():
-        num_z_and_1 = [-1 if (basis_state[bit_idx] == '1' and pauli_list[bit_idx] != 'I') else 1 for bit_idx in range(n_qubits)]
-        eigenvalue = reduce(lambda x, y: x*y, num_z_and_1)
-        expectation_value+=eigenvalue*meas_results[basis_state]
+#     """
+#     pauli_list = list(pauli)
+#     n_qubits = len(pauli_list)
+#     expectation_value=0.0
+#     for basis_state in meas_results.keys():
+#         num_z_and_1 = [-1 if (basis_state[bit_idx] == '1' and pauli_list[bit_idx] != 'I') else 1 for bit_idx in range(n_qubits)]
+#         eigenvalue = reduce(lambda x, y: x*y, num_z_and_1)
+#         expectation_value+=eigenvalue*meas_results[basis_state]
 
-    return expectation_value
+#     return expectation_value
+
 
 # def get_commuting_sets(paulis):
 #     """
@@ -190,8 +191,6 @@ def compute_expectation_value(pauli,meas_results):
     
 #     input:
 #         paulis (list<str>) : list of pauli terms
-    
-        
 #     """
 #     commuting_array=[]
 #     paulis=list(paulis)
@@ -209,60 +208,19 @@ def compute_expectation_value(pauli,meas_results):
 #         if not does_commute:
 #             commuting_array.append([p1])
 
-#     ## identify pauli which will define measurement basis
+#     ## identify measurement basis
 #     commuting_sets={}
 #     n_qubits=len(paulis[0])
-#     for p_set in commuting_array:
-#         minI=n_qubits
-#         identitfier=None
-#         for p in p_set:
-#             numI=p.count("I")
-#             if numI < minI:
-#                 minI=numI
-#                 identifier=p
-#         commuting_sets[identifier]=p_set
+#     for commuting_set in commuting_array:
+#         identifier=list("I"*n_qubits)
+#         for p in commuting_set:
+#             test=list(p)
+#             for i in range(len(test)):
+#                 if test[i]!="I":
+#                     identifier[i]=test[i]
+
+#         commuting_sets["".join(identifier)]=commuting_set
 #     return commuting_sets
-
-
-def get_commuting_sets(paulis):
-    """
-    Get a dictionary of commuting sets.  
-    
-    Key for each set is term with fewest number of idenity operators 
-    and thus provides key for measurement basis
-    
-    input:
-        paulis (list<str>) : list of pauli terms
-    """
-    commuting_array=[]
-    paulis=list(paulis)
-    for p1 in paulis:
-        does_commute=False
-        for i in range(len(commuting_array)):
-            p_set=commuting_array[i]
-            for p2 in p_set:
-                does_commute=commutes(p1,p2)
-                if not does_commute:
-                    break
-            if does_commute:
-                commuting_array[i].append(p1)
-                break
-        if not does_commute:
-            commuting_array.append([p1])
-
-    ## identify measurement basis
-    commuting_sets={}
-    n_qubits=len(paulis[0])
-    for commuting_set in commuting_array:
-        identifier=list("I"*n_qubits)
-        for p in commuting_set:
-            test=list(p)
-            for i in range(len(test)):
-                if test[i]!="I":
-                    identifier[i]=test[i]
-
-        commuting_sets["".join(identifier)]=commuting_set
-    return commuting_sets
 
 
 

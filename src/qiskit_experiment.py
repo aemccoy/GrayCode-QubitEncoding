@@ -47,7 +47,10 @@ def set_parameters(parameters):
                       'N_iter' : 1000,
                       'N_cpus' : 1,
                       'output_dir': 'outputs',
-                      'layout' : None
+                      'layout' : None,
+                      "number_cnot_pairs":0,
+                      "number_circuit_folding":0,
+                      "zero_noise_extrapolation":False
                       }
 
     for param in parameters:
