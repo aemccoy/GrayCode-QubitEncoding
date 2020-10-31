@@ -181,6 +181,49 @@ def compute_expectation_value(pauli,meas_results):
 
     return expectation_value
 
+# def get_commuting_sets(paulis):
+#     """
+#     Get a dictionary of commuting sets.  
+    
+#     Key for each set is term with fewest number of idenity operators 
+#     and thus provides key for measurement basis
+    
+#     input:
+#         paulis (list<str>) : list of pauli terms
+    
+        
+#     """
+#     commuting_array=[]
+#     paulis=list(paulis)
+#     for p1 in paulis:
+#         does_commute=False
+#         for i in range(len(commuting_array)):
+#             p_set=commuting_array[i]
+#             for p2 in p_set:
+#                 does_commute=commutes(p1,p2)
+#                 if not does_commute:
+#                     break
+#             if does_commute:
+#                 commuting_array[i].append(p1)
+#                 break
+#         if not does_commute:
+#             commuting_array.append([p1])
+
+#     ## identify pauli which will define measurement basis
+#     commuting_sets={}
+#     n_qubits=len(paulis[0])
+#     for p_set in commuting_array:
+#         minI=n_qubits
+#         identitfier=None
+#         for p in p_set:
+#             numI=p.count("I")
+#             if numI < minI:
+#                 minI=numI
+#                 identifier=p
+#         commuting_sets[identifier]=p_set
+#     return commuting_sets
+
+
 def get_commuting_sets(paulis):
     """
     Get a dictionary of commuting sets.  
@@ -190,8 +233,6 @@ def get_commuting_sets(paulis):
     
     input:
         paulis (list<str>) : list of pauli terms
-    
-        
     """
     commuting_array=[]
     paulis=list(paulis)
@@ -209,19 +250,22 @@ def get_commuting_sets(paulis):
         if not does_commute:
             commuting_array.append([p1])
 
-    ## identify pauli which will define measurement basis
+    ## identify measurement basis
     commuting_sets={}
     n_qubits=len(paulis[0])
-    for p_set in commuting_array:
-        minI=n_qubits
-        identitfier=None
-        for p in p_set:
-            numI=p.count("I")
-            if numI < minI:
-                minI=numI
-                identifier=p
-        commuting_sets[identifier]=p_set
+    for commuting_set in commuting_array:
+        identifier=list("I"*n_qubits)
+        for p in commuting_set:
+            test=list(p)
+            for i in range(len(test)):
+                if test[i]!="I":
+                    identifier[i]=test[i]
+
+        commuting_sets["".join(identifier)]=commuting_set
     return commuting_sets
+
+
+
 
 def initialize_circuit(q,c,initial_state="zeros"):
     """

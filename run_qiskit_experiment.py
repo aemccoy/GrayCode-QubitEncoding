@@ -56,12 +56,22 @@
 #              spsa_a : scaling parameter for step size.  (Default value : 0.628)
 #              spsa_c : scaling parameter for evolution.  (Default value : 0.1)
 #
-#      N_iter : Number of iterations after which to terminate optimizer algorithm. (Default value : 1000)
+#      N_iter -- Number of iterations after which to terminate optimizer algorithm. (Default value : 1000)
 #
 #      N_cpus (int) -- Number of processes over which trials are distributed. (Default value : 1)
 #
 #      output_dir (string) -- Directory for results files.  (Default value : "outputs").
 #                             Directory created at runtime if it doesn't exist.
+#
+#       number_cnot_pairs (int) -- Number of additional CNOT^2 gates to be added to each instance of a CNOT gate
+#                                  for error extrapoliation
+# 
+#       number_circuit_folding (int) -- Number of times circuit is folded (append Circuit.inverse Circuit) 
+#                                       for error extrapolation 
+# 
+#       zero_noise_extrapolation (bool) -- True: do extrapolation with either CNOT insertion or circuit folding
+#                                          False: do experiment normally 
+#
 ############################################################################################################
 
 import sys
