@@ -217,11 +217,10 @@ class GrayCodeHamiltonian(EncodingHamiltonian):
         # Get pauli representation for H acting on qubit states ordered by gray code
         self.pauli_rep = self._build_pauli_rep(H) 
 
-        self.to_dict=qubit_operator_to_dict(self)
-
-        self.pauli_partitions = self._pauli_partitions()
-        
+        # self.to_dict=qubit_operator_to_dict(self)
         self.pauli_coeffs = qubit_operator_to_dict(self) 
+        
+        self.pauli_partitions = self._pauli_partitions()
         
         # H represented as weighted pauli operator
         self.weighted_pauli=H_to_weighted_pauli(self)
@@ -235,18 +234,16 @@ class GrayCodeHamiltonian(EncodingHamiltonian):
         Get pauli representation for H acting on qubit states ordered by gray code
         """
         ## Generate number of states 
-        N_states=dim=np.size(H,0)
+        N_states=np.size(H,0)
         
         ## Get number of qubits 
-        N_qubits = int(np.ceil(np.log2(N_states)))
+        if N_states==1:
+            N_qubits=1
+        else:
+            N_qubits = int(np.ceil(np.log2(N_states)))
         
         ## Construct graycode for qubits 
         gc_states=gray_code(N_qubits)
-        
-#         print("Num states: ",N_states)
-#         print("Num qubits: ",N_qubits)
-#         print("gray code : ",gc_states)
-#         print("")
         
         ## initialize H
         full_operator = QubitOperator()
@@ -268,9 +265,9 @@ class GrayCodeHamiltonian(EncodingHamiltonian):
     def _to_matrix(self):
         ## If in qiskit ordering, need to flip pauli strings to get back to left to right ordering for matrix rep
         if self.qiskit_order:
-            return reduce(lambda x, y: x + y, [p[1] * get_pauli_matrix(p[0][::-1]) for p in self.to_dict.items()]).real
+            return reduce(lambda x, y: x + y, [p[1] * get_pauli_matrix(p[0][::-1]) for p in self.pauli_coeffs.items()]).real
         else:
-            return reduce(lambda x, y: x + y, [p[1] * get_pauli_matrix(p[0]) for p in self.to_dict.items()]).real
+            return reduce(lambda x, y: x + y, [p[1] * get_pauli_matrix(p[0]) for p in self.pauli_coeffs.items()]).real
 
 
     def _pauli_partitions(self):
@@ -280,7 +277,7 @@ class GrayCodeHamiltonian(EncodingHamiltonian):
         Returns:
             (dictionary) : Dictionary keyed by 
         """
-        pauli_dict=self.to_dict
+        pauli_dict=self.pauli_coeffs
         commuting_sets=get_commuting_sets(list(pauli_dict.keys()))
 
         return commuting_sets
