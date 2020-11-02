@@ -1,11 +1,11 @@
 import numpy as np
-
 from itertools import product, chain
-
 from openfermion.ops import FermionOperator, QubitOperator
 from openfermion.transforms import jordan_wigner 
 from openfermion.transforms import get_sparse_operator 
 from openfermion.utils import get_ground_state 
+from qiskit.quantum_info import Pauli
+from qiskit.aqua.operators import WeightedPauliOperator
 
 from utils import * 
 
@@ -149,6 +149,18 @@ def hamiltonian_matrix(Nmax,hw,J,interaction_filename):
     
     return T_matrix+V_matrix
 
+def H_to_weighted_pauli(self):
+    """
+    Converts Hamiltonian operator into a WeightedPauliOperator
+
+    Input: 
+        H (hamiltonian.EncodingHamiltonian) : Qubit Hamiltonian
+
+    Returns (WeightedPauliOperator) : Qubit Hamiltonian expressed as a WeightedPauliOperator
+
+    """
+    H_pairs=[(self.pauli_coeffs[k], Pauli.from_label(k)) for k in self.pauli_coeffs]
+    return WeightedPauliOperator(H_pairs)   
 
 
 
@@ -204,11 +216,15 @@ class GrayCodeHamiltonian(EncodingHamiltonian):
 
         # Get pauli representation for H acting on qubit states ordered by gray code
         self.pauli_rep = self._build_pauli_rep(H) 
+
         self.to_dict=qubit_operator_to_dict(self)
+
         self.pauli_partitions = self._pauli_partitions()
         
+        self.pauli_coeffs = qubit_operator_to_dict(self) 
         
-        self.pauli_coeffs = qubit_operator_to_dict(self) ## to make work with old code 
+        # H represented as weighted pauli operator
+        self.weighted_pauli=H_to_weighted_pauli(self)
         
         self.n_partitions = len(self.pauli_partitions.keys())
         
@@ -246,6 +262,8 @@ class GrayCodeHamiltonian(EncodingHamiltonian):
                 full_operator += Hme*term
 
         return full_operator 
+
+
 
     def _to_matrix(self):
         ## If in qiskit ordering, need to flip pauli strings to get back to left to right ordering for matrix rep
@@ -293,6 +311,8 @@ class JordanWignerHamiltonian(EncodingHamiltonian):
         self.pauli_rep = self._build_pauli_rep()
         self.pauli_coeffs = qubit_operator_to_dict(self)
         self.pauli_partitions = self._pauli_partitions()
+        # H represented as weighted pauli operator
+        self.weighted_pauli=H_to_weighted_pauli(self)
         self.n_partitions = len(self.pauli_partitions.keys())
         
         self.matrix = self._to_matrix() # Numerical matrix
@@ -315,14 +335,21 @@ class JordanWignerHamiltonian(EncodingHamiltonian):
     
     def _to_matrix(self):
         mat = np.zeros((self.N_states, self.N_states))
+        ## Returns matrix representation of qubit operator
+        ## If in qiskit ordering, need to flip pauli strings to get back to left to right ordering for matrix rep
+        if self.qiskit_order:
+            return reduce(lambda x, y: x + y, [p[1] * get_pauli_matrix(p[0][::-1]) for p in self.pauli_coeffs.items()]).real
+        else:
+            return reduce(lambda x, y: x + y, [p[1] * get_pauli_matrix(p[0]) for p in self.pauli_coeffs.items()]).real
 
-        # For each term in the Hamiltonian, populate the relevant entry in the matrix
-        for ferm_op in self.ferm_rep:
-            dag_op, op = list(ferm_op.terms.keys())[0]
-            dag_idx, op_idx = dag_op[0]-1, op[0]-1
-            mat[dag_idx, op_idx] = ferm_op.terms[(dag_op, op)]
+        ## Old version, returns NstatexNstate matrix 
+        # # For each term in the Hamiltonian, populate the relevant entry in the matrix
+        # for ferm_op in self.ferm_rep:
+        #     dag_op, op = list(ferm_op.terms.keys())[0]
+        #     dag_idx, op_idx = dag_op[0]-1, op[0]-1
+        #     mat[dag_idx, op_idx] = ferm_op.terms[(dag_op, op)]
 
-        return mat
+        # return mat
 
     def _pauli_partitions(self):
         """

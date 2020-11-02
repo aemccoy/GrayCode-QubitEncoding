@@ -16,48 +16,8 @@ from qiskit_circuits import *
 
 import itertools
 
-# def commutes(a,b):
-#     """
-#     Returns true if two operators commute
-    
-#     input:
-#         a,b (str) : Pauli operators.  Must be "X", "Y", "Z", "I"
-#     """
-#     #Todo add raise error if a[i] not in allowed pauli set
-#     does_commute=True
-#     for i in range(len(a)):
-#         ## If ai or bi are identity then ith paulis will commute 
-#         if a[i]=='I' or b[i]=='I':
-#             continue
-        
-#         ## if ai != bi then they won't commute 
-#         if a[i]!=b[i]:
-#             does_commute=False
-#             break
 
-#     return does_commute
-
-
-# def get_pauli_terms(weighted_pauli):
-#     """
-#     Extract out individual paul terms 
-    
-#     Input:
-#         weighted_pauli ():
-        
-#     Return
-#         terms (dictionary) : dictionary of {label:coef} for each pauli term. 
-#                 label is pauli string
-#     """
-#     terms={}
-#     for term in weighted_pauli.to_dict()['paulis']:
-#         label=term['label']
-#         coef=term['coeff']['real']+1j*term['coeff']['imag']
-#         terms[label]=coef
-#     return terms
-
-
-def get_sigma_pauli_terms(n_qubits):
+def sigma_terms(n_qubits):
     """
     Get all possible pauli operators with an odd number of Y gates for n_qubit qubits 
     
@@ -85,18 +45,18 @@ def get_sigma_pauli_terms(n_qubits):
     return sigmas
 
 
-def H_weighted_paulis(H):
-    """
-    Converts Hamiltonian operator into a WeightedPauliOperator
+# def H_weighted_paulis(H):
+#     """
+#     Converts Hamiltonian operator into a WeightedPauliOperator
 
-    Input: 
-        H (hamiltonian.EncodingHamiltonian) : Qubit Hamiltonian
+#     Input: 
+#         H (hamiltonian.EncodingHamiltonian) : Qubit Hamiltonian
 
-    Returns (WeightedPauliOperator) : Qubit Hamiltonian expressed as a WeightedPauliOperator
+#     Returns (WeightedPauliOperator) : Qubit Hamiltonian expressed as a WeightedPauliOperator
 
-    """
-    H_pairs=[(v, Pauli.from_label(k)) for (k, v) in list(H.pauli_coeffs.items())]
-    return WeightedPauliOperator(H_pairs)   
+#     """
+#     H_pairs=[(H.pauli_coeffs[k], Pauli.from_label(k)) for k in H.pauli_coeffs]
+#     return WeightedPauliOperator(H_pairs)   
     
     
 def b_terms(H,sigmas):
@@ -112,7 +72,8 @@ def b_terms(H,sigmas):
         b (dictionary) : b operator expressed as dictionary of {label:coef}, each label is a pauli string.
     """
     b_pauli_terms=[]
-    H_paulis=H_weighted_paulis(H)
+    # H_paulis=H_weighted_paulis(H)
+    H_paulis=H.weighted_pauli
     for sigma in sigmas:
         product=1j*(H_paulis.__mul__(sigma)-sigma.__mul__(H_paulis))
         product.chop(1e-5)
@@ -165,63 +126,6 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
     return pauli_set
 
-# def compute_expectation_value(pauli,meas_results):
-#     """
-#     Compute expectation value of pauli operator using counts obtained by running qiskit circuit
-#     Assumes pauli is in qiskit order (right to left)
-
-#     """
-#     pauli_list = list(pauli)
-#     n_qubits = len(pauli_list)
-#     expectation_value=0.0
-#     for basis_state in meas_results.keys():
-#         num_z_and_1 = [-1 if (basis_state[bit_idx] == '1' and pauli_list[bit_idx] != 'I') else 1 for bit_idx in range(n_qubits)]
-#         eigenvalue = reduce(lambda x, y: x*y, num_z_and_1)
-#         expectation_value+=eigenvalue*meas_results[basis_state]
-
-#     return expectation_value
-
-
-# def get_commuting_sets(paulis):
-#     """
-#     Get a dictionary of commuting sets.  
-    
-#     Key for each set is term with fewest number of idenity operators 
-#     and thus provides key for measurement basis
-    
-#     input:
-#         paulis (list<str>) : list of pauli terms
-#     """
-#     commuting_array=[]
-#     paulis=list(paulis)
-#     for p1 in paulis:
-#         does_commute=False
-#         for i in range(len(commuting_array)):
-#             p_set=commuting_array[i]
-#             for p2 in p_set:
-#                 does_commute=commutes(p1,p2)
-#                 if not does_commute:
-#                     break
-#             if does_commute:
-#                 commuting_array[i].append(p1)
-#                 break
-#         if not does_commute:
-#             commuting_array.append([p1])
-
-#     ## identify measurement basis
-#     commuting_sets={}
-#     n_qubits=len(paulis[0])
-#     for commuting_set in commuting_array:
-#         identifier=list("I"*n_qubits)
-#         for p in commuting_set:
-#             test=list(p)
-#             for i in range(len(test)):
-#                 if test[i]!="I":
-#                     identifier[i]=test[i]
-
-#         commuting_sets["".join(identifier)]=commuting_set
-#     return commuting_sets
-
 
 
 
@@ -259,7 +163,7 @@ def initialize_circuit(q,c,initial_state="zeros"):
     return circuit
 
 
-def get_evolution_circuit(q,A_set,circuit):
+def append_evolution_circuit(q,A_set,circuit):
     """
     Append evolution exp(-iAt) onto circuit for each time step t
     
@@ -280,31 +184,6 @@ def get_evolution_circuit(q,A_set,circuit):
             )
     return circuit  
 
-def get_measurement_circuit(q,c,circuit,set_id):
-    """
-    Append gates to transform qubit states to measurement basis 
-    
-    input 
-        q (qiskit.circuit.quantumregister.QuantumRegister) : qubits
-        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : quantum circuit 
-        set_id (str) : pauli operator to be measured
-    return
-        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : updated quantum circuit        
-    """
-    ## Reverse order to gates are applied right to left
-    id=set_id[::-1]
-    
-    for qubit_idx in range(len(set_id)):
-        pauli=id[qubit_idx]
-        if pauli == 'X':
-            circuit.h(q[qubit_idx])
-        elif pauli == 'Y':
-            circuit.sdg(q[qubit_idx])
-            circuit.h(q[qubit_idx])
-    
-    circuit.measure(q,c)
-    
-    return circuit
 
 
 def run_circuit_statevector(n_qubits,A_set,initialization=None):
@@ -317,7 +196,7 @@ def run_circuit_statevector(n_qubits,A_set,initialization=None):
 
         ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
         if len(A_set)>0:
-            circuit=get_evolution_circuit(q,A_set,circuit)
+            circuit=append_evolution_circuit(q,A_set,circuit)
 
         ## Execute circuit
         job = execute(circuit, Aer.get_backend("statevector_simulator"))
@@ -334,11 +213,12 @@ def run_circuit_qasm(n_qubits,A_set,pauli_id,n_shots=1024,initialization=None):
 
         ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
         if len(A_set)>0:
-            circuit=get_evolution_circuit(q,A_set,circuit)
+            circuit=append_evolution_circuit(q,A_set,circuit)
         
         ## Rotate to measurement basis 
-        circuit=get_measurement_circuit(q,c,circuit,pauli_id)       
-        
+        circuit=append_measurement_basis_rotation(circuit,q,pauli_id)       
+        circuit.measure(q,c)
+
         ## Execute circuit
         job = execute(circuit, Aer.get_backend("qasm_simulator"),shots=n_shots)
         
@@ -417,7 +297,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
     n_shots=10000 ## Set to allowed number of shots at IBMQ
 
     ## Get list of sigmas (all pauli terms with odd number Y gates)
-    sigmas=get_sigma_pauli_terms(n_qubits)
+    sigmas=sigma_terms(n_qubits)
 
     ## Construct b in terms of paulis 
     b_pauli_terms=b_terms(H,sigmas)
@@ -461,8 +341,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
                 for pauli in commuting_sets[pauli_id]: 
                     expectation_values[pauli]=compute_expectation_value(pauli,meas_results)    
 
-        # print("expectation values")
-        # print(expectation_values)
+
         ## Compute energy
         H_pauli=H.pauli_coeffs
         for key in H_pauli:
