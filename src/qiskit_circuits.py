@@ -30,6 +30,41 @@ def add_cnot_gate(circuit,q,c,t,num_cnot_pairs=0):
     
     return circuit
 
+
+def initialize_circuit(q,c,initial_state="zeros"):
+    """
+    Initialize circuit.  
+    
+    input:
+        q (qiskit.circuit.quantumregister.QuantumRegister) : qubits
+        initial_state(str or np.array) : initial state of circuit
+            "zeros" (str,default) : starting state is qubit state with all qubits in zero state
+            "uniform" (str) : Uniform superposition of all qubit states 
+             array(np.array) : normalized array of len(2**n_qubits)
+    returns
+        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : initialized quantum circuit
+    """    
+
+    if initial_state is None:
+        initial_state="zeros"
+        
+    if isinstance(initial_state, str):
+        if initial_state=="zeros":
+            circuit = QuantumCircuit(q,c)
+
+        elif initial_state=="uniform":
+            circuit = QuantumCircuit(q,c)
+            circuit.h(q)
+        else:
+
+            print(initial_state, "not currently valid option")
+            sys.exit(f"{initial_state} not currently valid option")
+    else:
+        circuit = QuantumCircuit(q,c)
+        circuit.initialize(initial_state,q)
+    return circuit
+
+
 def fold_circuit(circuit,num_folding):
     """
     Applies and then inverts circuit num_folding times before finally running the circuit
@@ -224,6 +259,28 @@ def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pa
         circuit.measure(q,c)
     
     return circuit
+
+
+def append_evolution_circuit(q,A_set,time,circuit):
+    """
+    Append evolution exp(-iAt) onto circuit for each time step t
+    
+    input:
+        q (qiskit.circuit.quantumregister.QuantumRegister) : qubits
+        A_set () : List of Weighted Pauli operators by which the circuit is evolved at each timestep
+        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : quantum circuit 
+
+    return
+        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : updated quantum circuit
+    """
+
+    for A in A_set: 
+        #Append next step to circuit for each A
+        circuit += A.evolve(
+            None, evo_time=time, num_time_slices=1,
+            quantum_registers=q
+            )
+    return circuit  
 
 
 def main():

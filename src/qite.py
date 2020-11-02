@@ -128,65 +128,7 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
 
 
-
-def initialize_circuit(q,c,initial_state="zeros"):
-    """
-    Initialize circuit.  
-    
-    input:
-        q (qiskit.circuit.quantumregister.QuantumRegister) : qubits
-        initial_state(str or np.array) : initial state of circuit
-            "zeros" (str,default) : starting state is qubit state with all qubits in zero state
-            "uniform" (str) : Uniform superposition of all qubit states 
-             array(np.array) : normalized array of len(2**n_qubits)
-    returns
-        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : initialized quantum circuit
-    """    
-
-    if initial_state is None:
-        initial_state="zeros"
-        
-    if isinstance(initial_state, str):
-        if initial_state=="zeros":
-            circuit = QuantumCircuit(q,c)
-
-        elif initial_state=="uniform":
-            circuit = QuantumCircuit(q,c)
-            circuit.h(q)
-        else:
-
-            print(initial_state, "not currently valid option")
-            sys.exit(f"{initial_state} not currently valid option")
-    else:
-        circuit = QuantumCircuit(q,c)
-        circuit.initialize(initial_state,q)
-    return circuit
-
-
-def append_evolution_circuit(q,A_set,circuit):
-    """
-    Append evolution exp(-iAt) onto circuit for each time step t
-    
-    input:
-        q (qiskit.circuit.quantumregister.QuantumRegister) : qubits
-        A_set () : List of Weighted Pauli operators by which the circuit is evolved at each timestep
-        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : quantum circuit 
-
-    return
-        circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : updated quantum circuit
-    """
-
-    for A in A_set: 
-        #Append next step to circuit for each A
-        circuit += A.evolve(
-            None, evo_time=1, num_time_slices=1,
-            quantum_registers=q
-            )
-    return circuit  
-
-
-
-def run_circuit_statevector(n_qubits,A_set,initialization=None):
+def run_circuit_statevector(n_qubits,A_set,time,initialization=None):
         ## Initalize circuit
 #         print("qubits ", n_qubits)
         q = QuantumRegister(n_qubits)
@@ -196,7 +138,7 @@ def run_circuit_statevector(n_qubits,A_set,initialization=None):
 
         ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
         if len(A_set)>0:
-            circuit=append_evolution_circuit(q,A_set,circuit)
+            circuit=append_evolution_circuit(q,A_set,time,circuit)
 
         ## Execute circuit
         job = execute(circuit, Aer.get_backend("statevector_simulator"))
@@ -204,7 +146,7 @@ def run_circuit_statevector(n_qubits,A_set,initialization=None):
         return job.result().get_statevector(circuit)        
 
     
-def run_circuit_qasm(n_qubits,A_set,pauli_id,n_shots=1024,initialization=None):
+def run_circuit_qasm(n_qubits,A_set,pauli_id,time,n_shots=1024,initialization=None):
         ## Initalize circuit
         q = QuantumRegister(n_qubits)
         c = ClassicalRegister(n_qubits)
@@ -213,7 +155,7 @@ def run_circuit_qasm(n_qubits,A_set,pauli_id,n_shots=1024,initialization=None):
 
         ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
         if len(A_set)>0:
-            circuit=append_evolution_circuit(q,A_set,circuit)
+            circuit=append_evolution_circuit(q,A_set,time,circuit)
         
         ## Rotate to measurement basis 
         circuit=append_measurement_basis_rotation(circuit,q,pauli_id)       
@@ -270,7 +212,8 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
     A=WeightedPauliOperator([(0.0,Pauli.from_label(identity_string))])
 
     for i in range((len(sigmas))):
-        A+=delta_time*a[i]*sigmas[i]
+        # A+=delta_time*a[i]*sigmas[i]
+        A+=a[i]*sigmas[i]
 
     if verbose==True:       
         print("t=",t)
@@ -323,7 +266,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
         expectation_values={}
         if backend=='statevector_simulator':
             ## Run circuit to get state vector
-            psi=run_circuit_statevector(n_qubits,A_set,initialization=initialization)
+            psi=run_circuit_statevector(n_qubits,A_set,delta_time,initialization=initialization)
 
             ## Compute expectation value for each pauli term 
             for pauli_id in commuting_sets:        
@@ -335,7 +278,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
         else:
             for pauli_id in commuting_sets:   
                 ## Run circuit to get counts 
-                meas_results=run_circuit_qasm(n_qubits,A_set,pauli_id,n_shots=n_shots,initialization=initialization)
+                meas_results=run_circuit_qasm(n_qubits,A_set,pauli_id,delta_time,n_shots=n_shots,initialization=initialization)
 
                 ## Compute expectation value for each pauli term 
                 for pauli in commuting_sets[pauli_id]: 
