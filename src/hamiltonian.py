@@ -9,25 +9,23 @@ from qiskit.aqua.operators import WeightedPauliOperator
 
 from utils import * 
 
-def generate_relative_states(Nmax,J,L=-1):
+def generate_relative_states(Nmax,J,L0=-1):
     """
     Generate deuteron basis for J subject to antisymmetry constraints
     """
     ## For deuteron, J=1
     i=0
     labels={}
-    
+
     Nlist=list(range(0,Nmax+1,2))
  
-    
     for T in [0,1]:
         for N in Nlist:
             ## If restricted to specific L channel
-            if L==-1:
+            if L0==-1:
                 L_values=list(range(N%2,N+1,2))
             else:
-                L_values=[L]
-                
+                L_values=[L0]
             for L in L_values:
                 for S in [0,1]:
                 
@@ -38,6 +36,7 @@ def generate_relative_states(Nmax,J,L=-1):
                         i += 1
 
     return labels
+
 
 
 def get_interaction(filename,basis):
@@ -99,7 +98,7 @@ def toy_interaction(basis):
     return V
 
 
-def Tme(Np,Lp,Sp,Jp,Tp,N,L,S,J,T,hw):
+def Tme(Np,Lp,Sp,Jp,Tp,N,L,S,J,T,hw,positive_origin=True):
     """
     Compute kinetic energy matrix element for given hw values
     based on formula given in prc-93-2016-044332-Binder
@@ -107,20 +106,30 @@ def Tme(Np,Lp,Sp,Jp,Tp,N,L,S,J,T,hw):
     # Kinetic energy
     if (Sp!=S) or (Tp!=T) or (Jp!=J) or (Lp!=L):
         return 0
+    
+    if positive_origin:
+        sigma=1
+    else:
+        sigma=-1
 
     n=int((N-L)/2);
     tme=0.0
     if Np==N:
         tme = hw/2*(2*n+L+1.5)
     if Np==(N-2):
-        tme = -hw/2*np.sqrt(n*(n+L+0.5))
+        tme = sigma*hw/2*np.sqrt(n*(n+L+0.5))
     if Np==(N+2):
-        tme=-hw/2*np.sqrt((n+1)*(n+L+1.5))
+        tme = sigma*hw/2*np.sqrt((n+1)*(n+L+1.5))
 
     return tme
 
-def get_kinetic_energy(basis,hw):
-    #Construct kinetic eneryg matrix
+def get_kinetic_energy(basis,hw,positive_origin=True):
+    """
+    Construct kinetic energy matrix 
+
+    Input 
+    """
+    
     dim=len(basis) 
     T_matrix=np.zeros((dim,dim))
     for statep in basis:
@@ -129,23 +138,37 @@ def get_kinetic_energy(basis,hw):
         for state in basis:
             [N,L,S,J,T]=state
             i=basis[state]
-
-            T_matrix[ip,i]=Tme(Np,Lp,Sp,Jp,Tp,N,L,S,J,T,hw)
+            T_matrix[ip,i]=Tme(Np,Lp,Sp,Jp,Tp,N,L,S,J,T,hw,positive_origin)
     return T_matrix
 
 
-def hamiltonian_matrix(Nmax,hw,J,interaction_filename):
-    
+def hamiltonian_matrix(Nmax,hw,J,interaction_filename,positive_origin=True):
+    """
+    Get interaction from file and constructs Hamiltonian matrix.
+
+    Input:
+        Nmax(int) : Nmax of basis
+        hw (float) : Harmonic oscillator basis parameter
+        J (float or int) :  Angular momenum of basis
+        interaction_filename (str) : file name of interaction or identifier 
+                if "toy_hamiltonian", matrix constructed for toy deuteron problem
+                    of [REF]
+
+    Returns: 
+        Hamiltonian matrix
+    """
     if interaction_filename=="toy_hamiltonian":
-        basis=generate_relative_states(Nmax,J,L=0)
+        basis=generate_relative_states(Nmax,J,L0=0)
         V_matrix=toy_interaction(basis)
         hw=7
+        positive_origin=False
+
     else:
         basis=generate_relative_states(Nmax,J)
         V_matrix=get_interaction(interaction_filename,basis)
     
     #Construct kinetic eneryg matrix 
-    T_matrix=get_kinetic_energy(basis,hw)
+    T_matrix=get_kinetic_energy(basis,hw,positive_origin)
     
     return T_matrix+V_matrix
 
