@@ -17,7 +17,7 @@ from qiskit_circuits import *
 import itertools
 
 
-def sigma_terms(n_qubits):
+def sigma_terms(n_qubits,jordan_wigner=False):
     """
     Get all possible pauli operators with an odd number of Y gates for n_qubit qubits 
     
@@ -34,8 +34,12 @@ def sigma_terms(n_qubits):
     ## Extract out pauli terms of odd number of Y 
     paulis=[]
     for string in pauli_product_strings:
-        if string.count("Y")%2==1:
-            paulis.append(Pauli.from_label(string))
+        if jordan_wigner:
+            if string.count("Y")==1:
+                paulis.append(Pauli.from_label(string))   ## TODO: double check this. 
+        else:
+            if string.count("Y")%2==1:
+                paulis.append(Pauli.from_label(string))
 
     sigmas=[]
     for pauli in paulis:
@@ -217,7 +221,8 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
     
     return A
 
-def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encoding="Graycode",A_threshold=1e-10,cstep=None):
+# def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encoding="Graycode",A_threshold=1e-10,cstep=None):
+def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="Graycode",A_threshold=1e-2,cstep=None):
     """
     Run qite evolution to get energies of ground state 
     """
@@ -244,11 +249,11 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encod
     ## Zero initialize 
     A_set=[]
     a=np.zeros(len(sigmas))
-    Energies=np.zeros(num_iterations)
-    # Ccoefs=np.zeros(num_iterations)
+    Energies=np.zeros(time_steps)
+    # Ccoefs=np.zeros(time_steps)
     ## for each time step, run circuit and compute A for the next time step
-    for t in tqdm(range(num_iterations)):
-#     for t in range(num_iterations):
+    for t in tqdm(range(time_steps)):
+#     for t in range(time_steps):
     #     print("")
         expectation_values={}
         if backend=='statevector_simulator':
