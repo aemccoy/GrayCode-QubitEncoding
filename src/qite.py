@@ -44,19 +44,6 @@ def sigma_terms(n_qubits):
 
     return sigmas
 
-
-# def H_weighted_paulis(H):
-#     """
-#     Converts Hamiltonian operator into a WeightedPauliOperator
-
-#     Input: 
-#         H (hamiltonian.EncodingHamiltonian) : Qubit Hamiltonian
-
-#     Returns (WeightedPauliOperator) : Qubit Hamiltonian expressed as a WeightedPauliOperator
-
-#     """
-#     H_pairs=[(H.pauli_coeffs[k], Pauli.from_label(k)) for k in H.pauli_coeffs]
-#     return WeightedPauliOperator(H_pairs)   
     
     
 def b_terms(H,sigmas):
@@ -128,13 +115,13 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
 
 
-def run_circuit_statevector(n_qubits,A_set,time,initialization=None):
+def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="Graycode"):
         ## Initalize circuit
 #         print("qubits ", n_qubits)
         q = QuantumRegister(n_qubits)
         c = ClassicalRegister(n_qubits)
         
-        circuit=initialize_circuit(q,c,initial_state=initialization)
+        circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
 
         ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
         if len(A_set)>0:
@@ -146,12 +133,12 @@ def run_circuit_statevector(n_qubits,A_set,time,initialization=None):
         return job.result().get_statevector(circuit)        
 
     
-def run_circuit_qasm(n_qubits,A_set,pauli_id,time,n_shots=1024,initialization=None):
+def run_circuit_qasm(n_qubits,A_set,pauli_id,time,n_shots=1024,initialization=None,encoding="Graycode"):
         ## Initalize circuit
         q = QuantumRegister(n_qubits)
         c = ClassicalRegister(n_qubits)
         
-        circuit=initialize_circuit(q,c,initial_state=initialization)
+        circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
 
         ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
         if len(A_set)>0:
@@ -230,7 +217,7 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
     
     return A
 
-def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_threshold=1e-10,cstep=None):
+def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encoding="Graycode",A_threshold=1e-10,cstep=None):
     """
     Run qite evolution to get energies of ground state 
     """
@@ -258,7 +245,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
     A_set=[]
     a=np.zeros(len(sigmas))
     Energies=np.zeros(num_iterations)
-    Ccoefs=np.zeros(num_iterations)
+    # Ccoefs=np.zeros(num_iterations)
     ## for each time step, run circuit and compute A for the next time step
     for t in tqdm(range(num_iterations)):
 #     for t in range(num_iterations):
@@ -292,7 +279,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
 
         ## compute normalization coef C=1-2*E*delta_times
         Ccoef=1-2*delta_time*Energies[t]
-        Ccoefs[t]=Ccoef
+        # Ccoefs[t]=Ccoef
         ## Compute A
         A_set.append(A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold))
 
@@ -304,5 +291,5 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,A_thr
                     A_combine+=A
                 A_set=[A_combine]
 
-    return Energies,Ccoefs
+    return Energies
 
