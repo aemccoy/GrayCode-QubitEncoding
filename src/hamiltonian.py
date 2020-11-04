@@ -74,6 +74,35 @@ def get_interaction(filename,basis):
 #     print(V)
     return V
 
+def get_hamiltonian(filename):
+    """
+    Read in Hamiltonian matrix from PN format
+
+    Basis given internally
+    """
+    f=open(filename,'r')
+    num_states=f.readline().split()[0]
+    num_states=int(num_states)
+    print(num_states,type(num_states))
+    H_matrix=np.zeros((num_states,num_states))
+    hw=f.readline()
+    basis={}
+
+    (S,J,T)=(1,1,0)
+    for l in range(num_states):
+        line=f.readline()
+        [i,n,L]=tuple(map(int,line.split()[:3]))
+        N=2*n+L
+        basis[(N,L,S,J,T)]=i
+    for l in range(num_states):
+        line=f.readline()
+        np.insert(H_matrix,l,float(line.split()[:num_states]),0)
+
+    f.close()
+    return basis,H_matrix
+
+
+
 def toy_interaction(basis):
     """
     Read in interaction from file. 
@@ -171,6 +200,44 @@ def hamiltonian_matrix(Nmax,hw,J,interaction_filename,positive_origin=True):
     T_matrix=get_kinetic_energy(basis,hw,positive_origin)
     
     return T_matrix+V_matrix
+
+
+def toy_hamiltonian(basis):
+    return get_kinetic_energy(basis,hw=7.0,positive_origin=False)+toy_interaction(basis)
+
+
+
+def hamiltonian_matrix(Nmax,hw,J,interaction,positive_origin=True):
+    """
+    Constructs Hamiltonian matrix.
+
+    Input:
+        Nmax(int) : Nmax of basis
+        hw (float) : Harmonic oscillator basis parameter
+        J (float or int) :  Angular momenum of basis
+        interaction_filename (str) : file name of interaction or identifier 
+                if "toy_hamiltonian", matrix constructed for toy deuteron problem
+                    of [REF]
+
+    Returns: 
+        Hamiltonian matrix
+    """
+    if interaction=="toy_hamiltonian":
+        basis=generate_relative_states(Nmax,J,L0=0)
+        H_matrix = toy_hamiltonian(basis)
+
+    # elif interaction == "N4LOsrg1.5":
+
+
+    else:
+        basis=generate_relative_states(Nmax,J)
+        V_matrix=get_interaction(interaction_filename,basis)
+    
+    #Construct kinetic eneryg matrix 
+    T_matrix=get_kinetic_energy(basis,hw,positive_origin)
+    
+    return H_matrix
+
 
 def H_to_weighted_pauli(self):
     """

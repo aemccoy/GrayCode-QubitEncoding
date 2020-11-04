@@ -93,9 +93,12 @@ def inspect_jordanwigner_hamiltonian(interaction_filename,hw,J,Nmax,qiskit_order
 
 
 if(__name__ == "__main__"):
-    test_energies("toy_hamiltonian",7.0,1,"JordanWigner",16)
-    test_energies("toy_hamiltonian",7.0,1,"Graycode",16)
+    # test_energies("toy_hamiltonian",7.0,1,"JordanWigner",16)
+    # test_energies("toy_hamiltonian",7.0,1,"Graycode",16)
     
-    inspect_graycode_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
-    inspect_jordanwigner_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
+    # inspect_graycode_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
+    # inspect_jordanwigner_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
     
+    filename="interactions/Heff_postsrg_3S1-3D1_n4lo500-srg1.5_18_14.dat"
+    basis,H_matrix=get_hamiltonian(filename)
+    print(H_matrix)
