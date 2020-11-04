@@ -253,7 +253,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encod
         expectation_values={}
         if backend=='statevector_simulator':
             ## Run circuit to get state vector
-            psi=run_circuit_statevector(n_qubits,A_set,delta_time,initialization=initialization)
+            psi=run_circuit_statevector(n_qubits,A_set,delta_time,initialization=initialization,encoding=encoding)
 
             ## Compute expectation value for each pauli term 
             for pauli_id in commuting_sets:        
@@ -265,7 +265,7 @@ def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encod
         else:
             for pauli_id in commuting_sets:   
                 ## Run circuit to get counts 
-                meas_results=run_circuit_qasm(n_qubits,A_set,pauli_id,delta_time,n_shots=n_shots,initialization=initialization)
+                meas_results=run_circuit_qasm(n_qubits,A_set,pauli_id,delta_time,n_shots=n_shots,initialization=initialization,encoding=encoding)
 
                 ## Compute expectation value for each pauli term 
                 for pauli in commuting_sets[pauli_id]: 
