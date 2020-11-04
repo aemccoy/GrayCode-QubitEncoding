@@ -1,3 +1,4 @@
+import glob
 import numpy as np
 from itertools import product, chain
 from openfermion.ops import FermionOperator, QubitOperator
@@ -74,32 +75,41 @@ def get_interaction(filename,basis):
 #     print(V)
     return V
 
-def get_hamiltonian(filename):
+def get_hamiltonian(filename,basis):
     """
     Read in Hamiltonian matrix from PN format
 
-    Basis given internally
     """
     f=open(filename,'r')
     num_states=f.readline().split()[0]
     num_states=int(num_states)
-    print(num_states,type(num_states))
-    H_matrix=np.zeros((num_states,num_states))
+    H_matrix_full=np.zeros((num_states,num_states))
     hw=f.readline()
-    basis={}
+    full_basis={}
 
     (S,J,T)=(1,1,0)
     for l in range(num_states):
         line=f.readline()
         [i,n,L]=tuple(map(int,line.split()[:3]))
         N=2*n+L
-        basis[(N,L,S,J,T)]=i
+        full_basis[(N,L,S,J,T)]=i-1 ## convert 1 based ndexing to 0 based indexing 
     for l in range(num_states):
         line=f.readline()
-        np.insert(H_matrix,l,float(line.split()[:num_states]),0)
+        H_matrix_full=np.insert(H_matrix_full,l,np.array(list(map(float,line.split()[:num_states]))),0)
+
+    H_matrix=np.zeros((len(basis),len(basis)))
+    for state1 in basis:
+        for state2 in basis:
+            i=basis[state1]
+            j=basis[state2]
+            ip=full_basis[state1]
+            jp=full_basis[state2]
+            H_matrix[i,j]=H_matrix_full[ip,jp]
 
     f.close()
-    return basis,H_matrix
+    # print(H_matrix)
+
+    return H_matrix
 
 
 
@@ -171,43 +181,52 @@ def get_kinetic_energy(basis,hw,positive_origin=True):
     return T_matrix
 
 
-def hamiltonian_matrix(Nmax,hw,J,interaction_filename,positive_origin=True):
-    """
-    Get interaction from file and constructs Hamiltonian matrix.
+# def hamiltonian_matrix(Nmax,hw,J,interaction_filename,positive_origin=True):
+#     """
+#     Get interaction from file and constructs Hamiltonian matrix.
 
-    Input:
-        Nmax(int) : Nmax of basis
-        hw (float) : Harmonic oscillator basis parameter
-        J (float or int) :  Angular momenum of basis
-        interaction_filename (str) : file name of interaction or identifier 
-                if "toy_hamiltonian", matrix constructed for toy deuteron problem
-                    of [REF]
+#     Input:
+#         Nmax(int) : Nmax of basis
+#         hw (float) : Harmonic oscillator basis parameter
+#         J (float or int) :  Angular momenum of basis
+#         interaction_filename (str) : file name of interaction or identifier 
+#                 if "toy_hamiltonian", matrix constructed for toy deuteron problem
+#                     of [REF]
 
-    Returns: 
-        Hamiltonian matrix
-    """
-    if interaction_filename=="toy_hamiltonian":
-        basis=generate_relative_states(Nmax,J,L0=0)
-        V_matrix=toy_interaction(basis)
-        hw=7
-        positive_origin=False
+#     Returns: 
+#         Hamiltonian matrix
+#     """
+#     if interaction_filename=="toy_hamiltonian":
+#         basis=generate_relative_states(Nmax,J,L0=0)
+#         V_matrix=toy_interaction(basis)
+#         hw=7
+#         positive_origin=False
 
-    else:
-        basis=generate_relative_states(Nmax,J)
-        V_matrix=get_interaction(interaction_filename,basis)
+#     else:
+#         basis=generate_relative_states(Nmax,J)
+#         V_matrix=get_interaction(interaction_filename,basis)
     
-    #Construct kinetic eneryg matrix 
-    T_matrix=get_kinetic_energy(basis,hw,positive_origin)
+#     #Construct kinetic eneryg matrix 
+#     T_matrix=get_kinetic_energy(basis,hw,positive_origin)
     
-    return T_matrix+V_matrix
+#     return T_matrix+V_matrix
 
 
 def toy_hamiltonian(basis):
     return get_kinetic_energy(basis,hw=7.0,positive_origin=False)+toy_interaction(basis)
 
+def find_interaction_dir():
+    # print()
+    if 'interactions' in glob.glob("*"):
+        return "interactions"
+    elif "../interactions" in glob.glob("../*"):
+        return "../interactions"
+    else:
+        print("interaction dir not found")
+        return None
 
 
-def hamiltonian_matrix(Nmax,hw,J,interaction,positive_origin=True):
+def hamiltonian_matrix(Nmax,J,interaction):
     """
     Constructs Hamiltonian matrix.
 
@@ -222,21 +241,44 @@ def hamiltonian_matrix(Nmax,hw,J,interaction,positive_origin=True):
     Returns: 
         Hamiltonian matrix
     """
-    if interaction=="toy_hamiltonian":
+    if interaction=="toy":
         basis=generate_relative_states(Nmax,J,L0=0)
         H_matrix = toy_hamiltonian(basis)
-
-    # elif interaction == "N4LOsrg1.5":
-
+        return H_matrix
 
     else:
+        interaction_dir=find_interaction_dir()
         basis=generate_relative_states(Nmax,J)
-        V_matrix=get_interaction(interaction_filename,basis)
-    
-    #Construct kinetic eneryg matrix 
-    T_matrix=get_kinetic_energy(basis,hw,positive_origin)
-    
-    return H_matrix
+
+        if interaction == "N4LOsrg1.5":
+            if J!=1:
+                raise ValueError("Interaction only defined for J=1")
+            filename=f"{interaction_dir}/Heff_postsrg_3S1-3D1_n4lo500-srg1.5_18_14.dat"
+            H_matrix=get_hamiltonian(filename,basis)
+            return H_matrix
+        
+        elif interaction == "Daejeon":
+            hw=15.0
+            filename=f"{interaction_dir}/Daejeon16_Nmax40_hw15.0_rel.dat"
+            T_matrix=get_kinetic_energy(basis,hw,positive_origin=True)
+            V_matrix=get_interaction(filename,basis)
+            return T_matrix+V_matrix
+
+        elif interaction == "N3L0srg2.15":
+            hw=20.0
+            filename=f"{interaction_dir}/N3LO_srg2.15_Nmax30_hw20.0_rel.dat"
+            V_matrix=get_interaction(filename,basis)
+            T_matrix=get_kinetic_energy(basis,hw,positive_origin=True)
+            return V_matrix+T_matrix
+         
+        elif interaction == "N2LOopt":
+            hw=20.0
+            filename=f"{interaction_dir}/N2LOopt_Nmax30_Jmax8_hw20.0.rel"
+            V_matrix=get_interaction(filename,basis)
+            T_matrix=get_kinetic_energy(basis,hw,positive_origin=True)
+            return V_matrix+T_matrix
+        else:
+            raise ValueError("Invalid interaction")
 
 
 def H_to_weighted_pauli(self):

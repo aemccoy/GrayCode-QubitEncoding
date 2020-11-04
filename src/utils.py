@@ -257,34 +257,6 @@ def expand_projector_sequence(seq):
 
 
 
-# def pauli_generators(N, x_loc=None):
-#     """ Construct a list of strings of Pauli generators on N qubits. If x_loc is set
-#     to an integer, then we will construct the generators on N qubits where the x_loc qubit
-#     is set to X and the remaining qubits contain the generators of N - 1 qubits.
-
-#     For example, 
-#         pauli_generators(4) = ['ZIII', 'IZII', 'IIZI', 'IIIZ']
-#         pauli_generators(4, 2) = ['ZIXI', 'IZXI', IIXZ'] 
-#     """
-#     if N < 1:
-#         raise ValueError("Number of Paulis must be >= 1 to construct generators.") 
-
-#     if x_loc is None:
-#         return ["I" * idx + "Z" + "I" * (N - idx - 1) for idx in range(N)]
-#     else:
-#         if x_loc < 0 or x_loc > N:
-#             raise ValueError(f"Invalid placement ({x_loc}) X in {N}-qubit Pauli.")
-#         base_generators = [list("I" * idx + "Z" + "I" * (N - idx - 2)) for idx in range(N - 1)]
-        
-#         # If we have two qubits, need to add I to the generator list
-#         if N == 2:
-#             base_generators.append(["I"])
-
-#         for idx in range(len(base_generators)):
-#             base_generators[idx].insert(x_loc, "X")
-#         return ["".join(gen) for gen in base_generators]
-
-
 def get_pauli_matrix(pauli):
     """ Take a Pauli string and compute its matrix representation.
 

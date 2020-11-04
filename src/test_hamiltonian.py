@@ -90,15 +90,21 @@ def inspect_jordanwigner_hamiltonian(interaction_filename,hw,J,Nmax,qiskit_order
     print(f"qiskit order: {H_qubit.qiskit_order}")
     print(H_qubit.matrix)
 
+def TestHamiltonianConstruction():
+    Nmax=18
+    J=1
+
+    for interaction in ["toy","N4LOsrg1.5","Daejeon","N3L0srg2.15","N2LOopt"]:    
+        H_matrix=hamiltonian_matrix(Nmax,J,interaction)
+        eigs,vecs=np.linalg.eigh(H_matrix)
+        print(f"{interaction}: {eigs[0]}")
 
 
 if(__name__ == "__main__"):
-    # test_energies("toy_hamiltonian",7.0,1,"JordanWigner",16)
-    # test_energies("toy_hamiltonian",7.0,1,"Graycode",16)
+    test_energies("toy_hamiltonian",7.0,1,"JordanWigner",16)
+    test_energies("toy_hamiltonian",7.0,1,"Graycode",16)
     
-    # inspect_graycode_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
-    # inspect_jordanwigner_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
+    inspect_graycode_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
+    inspect_jordanwigner_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
     
-    filename="interactions/Heff_postsrg_3S1-3D1_n4lo500-srg1.5_18_14.dat"
-    basis,H_matrix=get_hamiltonian(filename)
-    print(H_matrix)
+    TestHamiltonianConstruction()
