@@ -8,15 +8,15 @@ from hamiltonian import *
 # Generate "true" ground state energies of the deuteron Hamiltonian
 # Our Hamiltonians should be able to reproduce all these values.
 
-def test_energies(interaction_filename,hw,J,encoding,Nmax_max):
+def test_energies(Nmax_max,J,interaction,encoding):
     ## If qiskit ordering False
     for Nmax in range(0,Nmax_max+1,2):
-        H = hamiltonian_matrix(Nmax=Nmax,hw=hw,J=J,interaction_filename=interaction_filename) 
+        H = hamiltonian_matrix(Nmax,J,interaction) 
         exact_energy=np.linalg.eigh(H)[0][0]
 
-        if encoding=="Graycode":
+        if encoding=="gray_code":
             H_qubit = GrayCodeHamiltonian(H,qiskit_order=False)
-        elif encoding =="JordanWigner":
+        elif encoding =="jordan_wigner":
             H_qubit = JordanWignerHamiltonian(H,qiskit_order=False)
         else:
             raise ValueError(f"Encoding {encoding} is not valid type.\nPlease choose 'Graycode' or 'JordanWigner'")
@@ -26,13 +26,13 @@ def test_energies(interaction_filename,hw,J,encoding,Nmax_max):
 
     ## If qiskit ordering True
     for Nmax in range(0,Nmax_max+1,2):
-        H = hamiltonian_matrix(Nmax=Nmax,hw=7.0,J=1,interaction_filename="toy_hamiltonian") 
+        H = hamiltonian_matrix(Nmax,J,interaction)
         
         exact_energy=np.linalg.eigh(H)[0][0]
         
-        if encoding=="Graycode":
+        if encoding=="gray_code":
             H_qubit = GrayCodeHamiltonian(H,qiskit_order=True)
-        elif encoding =="JordanWigner":
+        elif encoding =="jordan_wigner":
             H_qubit = JordanWignerHamiltonian(H,qiskit_order=True)
         else:
             raise ValueError(f"Encoding {encoding} is not valid type.\nPlease choose 'Graycode' or 'JordanWigner'")
@@ -42,8 +42,8 @@ def test_energies(interaction_filename,hw,J,encoding,Nmax_max):
 
     print("Energy test complete")
 
-def inspect_graycode_hamiltonian(interaction_filename,hw,J,Nmax,qiskit_order=True):
-    H = hamiltonian_matrix(Nmax=Nmax,hw=hw,J=J,interaction_filename=interaction_filename)
+def inspect_graycode_hamiltonian(Nmax,J,interaction,qiskit_order=True):
+    H = hamiltonian_matrix(Nmax=Nmax,J=J,interaction=interaction)
     H_qubit = GrayCodeHamiltonian(H,qiskit_order=False)
     print("GrayCodeHamiltonian")
     print(f"N_states: {H_qubit.N_states}")
@@ -67,8 +67,8 @@ def inspect_graycode_hamiltonian(interaction_filename,hw,J,Nmax,qiskit_order=Tru
     print(H_qubit.matrix)
 
     
-def inspect_jordanwigner_hamiltonian(interaction_filename,hw,J,Nmax,qiskit_order=True):
-    H = hamiltonian_matrix(Nmax=Nmax,hw=hw,J=J,interaction_filename=interaction_filename)
+def inspect_jordanwigner_hamiltonian(Nmax,J,interaction,qiskit_order=True):
+    H = hamiltonian_matrix(Nmax=Nmax,J=J,interaction=interaction)
     H_qubit = JordanWignerHamiltonian(H,qiskit_order=False)
     print("GrayCodeHamiltonian")
     print(f"N_states: {H_qubit.N_states}")
@@ -101,10 +101,10 @@ def TestHamiltonianConstruction():
 
 
 if(__name__ == "__main__"):
-    test_energies("toy_hamiltonian",7.0,1,"JordanWigner",16)
-    test_energies("toy_hamiltonian",7.0,1,"Graycode",16)
+    test_energies(Nmax_max=16,J=1,interaction="toy",encoding="jordan_wigner")
+    test_energies(Nmax_max=16,J=1,interaction="toy",encoding="gray_code")
     
-    inspect_graycode_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
-    inspect_jordanwigner_hamiltonian("toy_hamiltonian",hw=7.0,J=1,Nmax=4,qiskit_order=True)
+    inspect_graycode_hamiltonian(Nmax=4,J=1,interaction="toy",qiskit_order=True)
+    inspect_jordanwigner_hamiltonian(Nmax=4,J=1,interaction="toy",qiskit_order=True)
     
     TestHamiltonianConstruction()

@@ -1,6 +1,6 @@
 import numpy as np 
 from scipy.linalg import lstsq
-
+from pprint import pprint
 from tqdm import tqdm
 
 from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit
@@ -15,6 +15,80 @@ from utils import *
 from qiskit_circuits import *
 
 import itertools
+
+def set_qite_parameters(parameters):
+    """
+    Set any parameters not included in input parameter file to default values.
+
+    Parameters:
+        parameters (dictionary) : Input parameters for VQE.
+
+    Returns:
+        parameters : Updated parameters to include default parameters not given by input file
+    """
+
+    default_parameters = {
+                      'Nmax' : 0,
+                      'interaction':"toy",
+                      'encoding' : 'gray_code',
+                      'initialization' : 'single_state',
+                      'N_trials' : 1,
+                      'N_time_steps': 1,
+                      'delta_time' : .01,
+                      'merge_step' : None,
+                      'threshold' : 1e-2, ## threshold for lstsq solver
+                      'backend' : 'statevector_simulator',
+                      'N_shots' : 10000,
+                      'device_name' : None,
+                      'mitigate_meas_error' : False,
+                      'N_cpus' : 1,
+                      'output_dir': 'outputs',
+                      'layout' : None
+                      }
+
+    # Check for valid encoding and backend
+    for param in parameters:
+        if (param == 'encoding') and (parameters['encoding']!='gray_code' and parameters['encoding']!='jordan_wigner'):
+            raise ValueError("Encoding {} not supported.  Please select 'gray_code' or 'jordan_wigner'. ".format(parameters['encoding']) )
+        
+        if (param == 'backend') and (parameters['backend']!='statevector_simulator' and parameters['backend']!='qasm_simulator'):
+            raise ValueError("Backend {} not supported.  Please select 'statevector_simulator' or 'qasm_simulator'. ")
+
+    # Set default values for anything not provided
+    for parameter in default_parameters.keys():
+        # parameter 'N_states' must be set in input file
+        if 'Nmax' not in parameters.keys():
+            raise ValueError("Must provide Nmax for simulation.")
+        if parameter not in parameters.keys():
+            # Setting parameter to default parameter
+            parameters[parameter] = default_parameters[parameter]
+            print(f"No value for parameter {parameter} provided.")
+            print(f"Setting {parameter} to default value {default_parameters[parameter]}.")
+
+    # accept 'None' as a string in params.yml
+    if parameters['device_name'] == 'none' or parameters['device_name'] == 'None':
+        parameters['device_name'] = None
+    if parameters['layout'] == 'none' or parameters['layout'] == 'None':
+        parameters['layout'] = None
+
+    # Check compatibility between device, layout and measurement error mitigation
+    if parameters['device_name'] is None:
+        if parameters['layout'] is not None:
+            raise ValueError("Layout cannot be specified without a device.")
+        if parameters['mitigate_meas_error'] is not False:
+            raise ValueError("Measurement mitigation is not possible if no device is specified")
+
+    # Layout must None or a list of ints
+    if parameters['layout'] is not None:
+        assert type(parameters['layout']) is list, "Layout must be a list of integers."
+        assert all([type(q) is int for q in parameters['layout']]), "Layout must be a list of integers."
+
+    print("\nExperiment parameters")
+    pprint(parameters)
+    print()
+
+    return parameters
+
 
 
 def sigma_terms(n_qubits,jordan_wigner=False):
@@ -119,7 +193,7 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
 
 
-def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="Graycode"):
+def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="gray_code"):
         ## Initalize circuit
 #         print("qubits ", n_qubits)
         q = QuantumRegister(n_qubits)
@@ -137,7 +211,7 @@ def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="Gr
         return job.result().get_statevector(circuit)        
 
     
-def run_circuit_qasm(n_qubits,A_set,pauli_id,time,n_shots=1024,initialization=None,encoding="Graycode"):
+def run_circuit_qasm(n_qubits,A_set,pauli_id,time,n_shots=1024,initialization=None,encoding="gray_code"):
         ## Initalize circuit
         q = QuantumRegister(n_qubits)
         c = ClassicalRegister(n_qubits)
@@ -221,8 +295,8 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
     
     return A
 
-# def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encoding="Graycode",A_threshold=1e-10,cstep=None):
-def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="Graycode",A_threshold=1e-2,cstep=None):
+# def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encoding="gray_code",A_threshold=1e-10,cstep=None):
+def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="gray_code",A_threshold=1e-2,cstep=None):
     """
     Run qite evolution to get energies of ground state 
     """
@@ -297,4 +371,45 @@ def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="Gra
                 A_set=[A_combine]
 
     return Energies
+
+def do_qite_experiment(trial_index,parameters):
+    ## Construct Hamiltonian in HO basis
+    H = hamiltonian_matrix(Nmax=parameters['Nmax'], J=1, interaction=parameters['interaction'])
+
+    ## Construct qubit Hamiltonian
+    if parameters['encoding'] == 'gray_code':
+        H_qubit = GrayCodeHamiltonian(H)
+        
+    elif parameters['encoding'] == 'jordan_wigner':
+        H_qubit = JordanWignerHamiltonian(H)
+
+    if(trial_index==0):
+        print("Hamiltonian Pauli rep")
+        print(H_qubit.pauli_rep,"\n")
+        print("Pauli partitions")
+        print(H_qubit.pauli_partitions,"\n")
+
+    energies=qite_experiment(
+            H_qubit,
+            time_steps = parameters['N_time_steps'],
+            delta_time = parameters['delta_time'],
+            backend = parameters['backend'],
+            initialization = parameters['initialization'],
+            encoding = parameters['encoding'],
+            A_threshold = parameters['threshold'],
+            cstep = parameters['merge_step']
+        )
+    # print(energies)
+    return energies
+
+def analyze_qite_results(results_filename):
+    ## Each row corresponds to a given time step
+    results=np.load(results_filename)
+    averages=np.mean(results,0)
+    stdevs=np.std(results,0)
+    # print(averages)
+    # print(stdevs)
+    return averages,stdevs
+
+
 

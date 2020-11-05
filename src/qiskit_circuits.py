@@ -32,7 +32,7 @@ def add_cnot_gate(circuit,q,c,t,num_cnot_pairs=0):
     return circuit
 
 
-def initialize_circuit(q,c,initial_state="single_state",encoding="Graycode"):
+def initialize_circuit(q,c,initial_state="single_state",encoding="gray_code"):
     """
     Initialize circuit.  
     
@@ -41,8 +41,8 @@ def initialize_circuit(q,c,initial_state="single_state",encoding="Graycode"):
         initial_state(str or np.array,optional) : initial state of circuit
 
             "single_state" (str,default) : starting state is qubit state with all qubits in zero state
-                    If encoding="Graycode", initialize to |00>
-                    If encoding="JordanWigner", Initalize to |01>
+                    If encoding="gray_code", initialize to |00>
+                    If encoding="jordan_wigner", Initalize to |01>
 
             "zeros"(str,obsolete) : same as single state for Graycode
 
@@ -57,23 +57,23 @@ def initialize_circuit(q,c,initial_state="single_state",encoding="Graycode"):
         circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : initialized quantum circuit
     
     """    
-    if encoding!="Graycode" and encoding!="JordanWigner":
+    if encoding!="gray_code" and encoding!="jordan_wigner":
         raise ValueError("Invalid encoding for circuit.")
 
     ## Sets parameters to only create circuit but not add initial state
     if initial_state == "zeros" or initial_state == None:
         initial_state = "single_state"
-        encoding = "Graycode"
+        encoding = "gray_code"
         
     if isinstance(initial_state, str):
-        if (initial_state=="single_state") and (encoding == "Graycode"):
+        if (initial_state=="single_state") and (encoding == "gray_code"):
             circuit = QuantumCircuit(q,c)
 
-        elif initial_state=="single_state" and encoding == "JordanWigner":
+        elif initial_state=="single_state" and encoding == "jordan_wigner":
             circuit = QuantumCircuit(q,c)
             circuit.x(q[0])
 
-        elif initial_state=="uniform" and encoding == "Graycode":
+        elif initial_state=="uniform" and encoding == "gray_code":
             circuit = QuantumCircuit(q,c)
             circuit.h(q)
         else:
@@ -248,16 +248,16 @@ def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pa
 
     input:
         encoding (string) : string identifier for which type of variational circuit to run 
-                "Graycode" : variational ansatz for dense Gray code encoding
-                "JordanWigner" : variational ansatz for Jordan Wigner encoding
+                "gray_code" : variational ansatz for dense Gray code encoding
+                "jordan_wigner" : variational ansatz for Jordan Wigner encoding
 
     returns:
         circuit (QuantumCircuit) : variational circuit
     """
     N_states=len(thetas)+1
-    if encoding=="Graycode":
+    if encoding=="gray_code":
         N_qubits = int(np.ceil(np.log2(N_states)))
-    elif encoding == "JordanWigner":
+    elif encoding == "jordan_wigner":
         N_qubits=N_states
     else:
         raise ValueError("Invalid encoding for variational circuit.")
@@ -265,9 +265,9 @@ def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pa
     q, c = QuantumRegister(N_qubits), ClassicalRegister(N_qubits)
     circuit = QuantumCircuit(q, c)
     
-    if encoding=="Graycode":
+    if encoding=="gray_code":
         circuit=append_Gray_code_variational_ansatz(circuit,q,thetas,num_cnot_pairs)
-    else: # must be "JordanWigner" else exception raised earlier 
+    else: # must be "jordan_wigner" else exception raised earlier 
         circuit=append_Jordan_Wigner_variational_ansatz(circuit,q,thetas,num_cnot_pairs)
         
     if backend_name=="qasm_simulator":
@@ -305,7 +305,7 @@ def append_evolution_circuit(q,A_set,time,circuit):
 def main():
      ## Testing
     N_states=4
-    encoding="Graycode"
+    encoding="gray_code"
     N_qubits = int(np.ceil(np.log2(N_states)))
 
     measurement_idx="X"*N_qubits
