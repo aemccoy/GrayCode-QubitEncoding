@@ -13,7 +13,7 @@ from qiskit.aqua.components.initial_states import Custom
 from hamiltonian import *
 from utils import *
 from qiskit_circuits import *
-
+from qlanczos import *
 import itertools
 
 def set_qite_parameters(parameters):
@@ -26,7 +26,6 @@ def set_qite_parameters(parameters):
     Returns:
         parameters : Updated parameters to include default parameters not given by input file
     """
-
     default_parameters = {
                       'Nmax' : 0,
                       'interaction':"toy",
@@ -36,6 +35,8 @@ def set_qite_parameters(parameters):
                       'N_time_steps': 1,
                       'delta_time' : .01,
                       'merge_step' : None,
+                      'QLanczos' : False,
+                      'krylov_threshold' : 0.99999, ## thresold for QLanczos regularization factor
                       'threshold' : 1e-2, ## threshold for lstsq solver
                       'backend' : 'statevector_simulator',
                       'N_shots' : 10000,
@@ -43,7 +44,8 @@ def set_qite_parameters(parameters):
                       'mitigate_meas_error' : False,
                       'N_cpus' : 1,
                       'output_dir': 'outputs',
-                      'layout' : None
+                      'layout' : None,
+                      'show_progress' : True
                       }
 
     # Check for valid encoding and backend
@@ -91,7 +93,7 @@ def set_qite_parameters(parameters):
 
 
 
-def sigma_terms(n_qubits,jordan_wigner=False):
+def sigma_terms(n_qubits,encoding="gray_code"):
     """
     Get all possible pauli operators with an odd number of Y gates for n_qubit qubits 
     
@@ -108,12 +110,14 @@ def sigma_terms(n_qubits,jordan_wigner=False):
     ## Extract out pauli terms of odd number of Y 
     paulis=[]
     for string in pauli_product_strings:
-        if jordan_wigner:
-            if string.count("Y")==1:
-                paulis.append(Pauli.from_label(string))   ## TODO: double check this. 
-        else:
-            if string.count("Y")%2==1:
-                paulis.append(Pauli.from_label(string))
+        if string.count("Y")%2==1:
+            ## If JW encoding, include only operators which enable evolution operator to stay in "one-hot" subspace 
+            ## These are operators with an even number of Y and X gates 
+            if encoding == "jordan_wigner":
+                if (string.count("Y")+string.count("X"))%2 != 0:
+                    continue
+            ## Add Pauli operator to list 
+            paulis.append(Pauli.from_label(string))
 
     sigmas=[]
     for pauli in paulis:
@@ -193,7 +197,7 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
 
 
-def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="gray_code"):
+def run_circuit_statevector(n_qubits,evolution_operators,time,initialization=None,encoding="gray_code"):
         ## Initalize circuit
 #         print("qubits ", n_qubits)
         q = QuantumRegister(n_qubits)
@@ -201,9 +205,9 @@ def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="gr
         
         circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
 
-        ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
-        if len(A_set)>0:
-            circuit=append_evolution_circuit(q,A_set,time,circuit)
+        ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
+        if len(evolution_operators)>0:
+            circuit=append_evolution_circuit(q,evolution_operators,time,circuit)
 
         ## Execute circuit
         job = execute(circuit, Aer.get_backend("statevector_simulator"))
@@ -211,16 +215,16 @@ def run_circuit_statevector(n_qubits,A_set,time,initialization=None,encoding="gr
         return job.result().get_statevector(circuit)        
 
     
-def run_circuit_qasm(n_qubits,A_set,pauli_id,time,n_shots=1024,initialization=None,encoding="gray_code"):
+def run_circuit_qasm(n_qubits,evolution_operators,pauli_id,time,n_shots=1024,initialization=None,encoding="gray_code"):
         ## Initalize circuit
         q = QuantumRegister(n_qubits)
         c = ClassicalRegister(n_qubits)
         
         circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
 
-        ## If A_set not t, then evolve cirucit using previously computed A matrices stored in A_set
-        if len(A_set)>0:
-            circuit=append_evolution_circuit(q,A_set,time,circuit)
+        ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
+        if len(evolution_operators)>0:
+            circuit=append_evolution_circuit(q,evolution_operators,time,circuit)
         
         ## Rotate to measurement basis 
         circuit=append_measurement_basis_rotation(circuit,q,pauli_id)       
@@ -295,44 +299,53 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
     
     return A
 
-# def run_qite_experiment(H,num_iterations,delta_time,backend,initialization,encoding="gray_code",A_threshold=1e-10,cstep=None):
-def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="gray_code",A_threshold=1e-2,cstep=None):
+
+def qite_experiment(
+        H,time_steps,
+        delta_time,
+        backend,
+        initialization,
+        encoding="gray_code",
+        A_threshold=1e-2,
+        krylov_threshold=0.99999,
+        cstep=None,
+        show_progress=True,
+        n_shots=10000,
+        QLanczos=False
+    ):
     """
     Run qite evolution to get energies of ground state 
     """
-
     n_qubits=H.N_qubits
-#     print("num qubits",n_qubits)
-    n_shots=10000 ## Set to allowed number of shots at IBMQ
 
     ## Get list of sigmas (all pauli terms with odd number Y gates)
-    sigmas=sigma_terms(n_qubits)
+    sigmas=sigma_terms(n_qubits,encoding)
 
-    ## Construct b in terms of paulis 
+    ## Construct b and S in terms of paulis form sigmas 
     b_pauli_terms=b_terms(H,sigmas)
-    
-    ## Construct S in terms of paulis
     S_pauli_terms=S_terms(sigmas)
 
-    ## Get composite set of pauli terms that need to be calculated for QITE 
+    ## Get commuting set of pauli terms 
     pauli_set=get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms)
-
-    ## Get commuting set 
     commuting_sets=get_commuting_sets(sorted(pauli_set))
     
     ## Zero initialize 
-    A_set=[]
+    evolution_set=[]
     a=np.zeros(len(sigmas))
     Energies=np.zeros(time_steps)
-    # Ccoefs=np.zeros(time_steps)
+    Ccoefs=np.zeros(time_steps)
     ## for each time step, run circuit and compute A for the next time step
-    for t in tqdm(range(time_steps)):
-#     for t in range(time_steps):
-    #     print("")
+    
+    if show_progress:
+        time_range=tqdm(range(time_steps))
+    else:
+        time_range=range(time_steps)
+
+    for t in time_range:
         expectation_values={}
         if backend=='statevector_simulator':
             ## Run circuit to get state vector
-            psi=run_circuit_statevector(n_qubits,A_set,delta_time,initialization=initialization,encoding=encoding)
+            psi=run_circuit_statevector(n_qubits,evolution_set,delta_time,initialization=initialization,encoding=encoding)
 
             ## Compute expectation value for each pauli term 
             for pauli_id in commuting_sets:        
@@ -344,7 +357,7 @@ def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="gra
         else:
             for pauli_id in commuting_sets:   
                 ## Run circuit to get counts 
-                meas_results=run_circuit_qasm(n_qubits,A_set,pauli_id,delta_time,n_shots=n_shots,initialization=initialization,encoding=encoding)
+                meas_results=run_circuit_qasm(n_qubits,evolution_set,pauli_id,delta_time,n_shots=n_shots,initialization=initialization,encoding=encoding)
 
                 ## Compute expectation value for each pauli term 
                 for pauli in commuting_sets[pauli_id]: 
@@ -358,21 +371,31 @@ def qite_experiment(H,time_steps,delta_time,backend,initialization,encoding="gra
 
         ## compute normalization coef C=1-2*E*delta_times
         Ccoef=1-2*delta_time*Energies[t]
-        # Ccoefs[t]=Ccoef
+        Ccoefs[t]=Ccoef
+
         ## Compute A
-        A_set.append(A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold))
+        evolution_set.append(A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold))
 
         if isinstance(cstep,int):
             if t%cstep==0:
                 identity_string="I"*n_qubits
                 A_combine=WeightedPauliOperator([(0.0,Pauli.from_label(identity_string))])
-                for A in A_set:
+                for A in evolution_set:
                     A_combine+=A
-                A_set=[A_combine]
+                evolution_set=[A_combine]
 
-    return Energies
+    ## Just return calculated energies
+    if not QLanczos:
+        return Energies
 
-def do_qite_experiment(trial_index,parameters):
+    ## Otherwise, do QLanczos calculation
+    else:
+        ## Do QLanczos on computed vectors 
+        qlanczos_energy=do_QLanczos(Ccoefs,Energies,krylov_threshold=krylov_threshold)
+
+        return Energies,qlanczos_energy
+
+def do_qite_experiment(trial_index,parameters,show_progress=True):
     ## Construct Hamiltonian in HO basis
     H = hamiltonian_matrix(Nmax=parameters['Nmax'], J=1, interaction=parameters['interaction'])
 
@@ -389,18 +412,24 @@ def do_qite_experiment(trial_index,parameters):
         print("Pauli partitions")
         print(H_qubit.pauli_partitions,"\n")
 
-    energies=qite_experiment(
+    results=qite_experiment(
             H_qubit,
             time_steps = parameters['N_time_steps'],
             delta_time = parameters['delta_time'],
             backend = parameters['backend'],
             initialization = parameters['initialization'],
             encoding = parameters['encoding'],
-            A_threshold = parameters['threshold'],
-            cstep = parameters['merge_step']
+            A_threshold = parameters['Qite_threshold'],
+            krylov_threshold = parameters['Krylov_threshold'],
+            cstep = parameters['merge_step'],
+            show_progress=parameters['show_progress'],
+            n_shots=parameters['N_shots'],
+            QLanczos=parameters['QLanczos']
         )
+
+
     # print(energies)
-    return energies
+    return results
 
 def analyze_qite_results(results_filename):
     ## Each row corresponds to a given time step

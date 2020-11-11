@@ -280,20 +280,20 @@ def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pa
     return circuit
 
 
-def append_evolution_circuit(q,A_set,time,circuit):
+def append_evolution_circuit(q,evolution_set,time,circuit):
     """
     Append evolution exp(-iAt) onto circuit for each time step t
     
     input:
         q (qiskit.circuit.quantumregister.QuantumRegister) : qubits
-        A_set () : List of Weighted Pauli operators by which the circuit is evolved at each timestep
+        evolution_set () : List of Weighted Pauli operators by which the circuit is evolved at each timestep
         circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : quantum circuit 
 
     return
         circuit (qiskit.circuit.quantumcircuit.QuantumCircuit) : updated quantum circuit
     """
 
-    for A in A_set: 
+    for A in evolution_set: 
         #Append next step to circuit for each A
         circuit += A.evolve(
             None, evo_time=time, num_time_slices=1,

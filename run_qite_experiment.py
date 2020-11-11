@@ -91,7 +91,14 @@ from qiskit_circuits import *
 from qite import *
 
 
-
+def qite_output_filename(parameters):
+    encoding_label="".join(parameters["encoding"].split("_"))
+    backend_label=parameters["backend"].split("_")[0]
+    Nmax=parameters["Nmax"]
+    interaction=parameters["interaction"]
+    merge_step=parameters["merge_step"]
+    output_filename=f"qite_results_Nmax{Nmax:02d}_{interaction}_{encoding_label}_{backend_label}_ms{merge_step}"
+    return output_filename
 
 if __name__ == "__main__":
 
@@ -127,15 +134,28 @@ if __name__ == "__main__":
         do_qite_experiment, trial_indices, task_args=[parameters], num_processes=parameters['N_cpus']
         )
 
-    encoding_label="".join(parameters["encoding"].split("_"))
-    backend_label=parameters["backend"].split("_")[0]
-    Nmax=parameters["Nmax"]
-    interaction=parameters["interaction"]
-    merge_step=parameters["merge_step"]
-    output_filename=f"qite_results_Nmax{Nmax:02d}_{interaction}_{encoding_label}_{backend_label}_ms{merge_step}"
+    output_filename=qite_output_filename(parameters)
     print(output_filename)
-    np.save(output_filename,results)
-    results_in=np.load(output_filename+".npy")
-    # print(results)
-    # print(results_in)
+    
+    ## If QLanczos done for each step, we need to partition the output results
+    if parameters['QLanczos']:
+        qite_results=[]
+        qlanczos_results=[]
+        for qite_energies,qlanczos_energy in results:
+            qite_results.append(qite_energies)
+            qlanczos_results.append(qlanczos_energy)
+        
+        ## Save Qite results
+        np.save(output_filename,qite_results)
+
+        ## Save QLanczos results
+        qlanczos_output_filename="qlanczos"+output_filename[4:]
+        print(qlanczos_output_filename)
+        # print(qlanczos_results)
+        np.save(qlanczos_output_filename,qlanczos_results)
+    
+    ## If qite only, simply save qite results
+    else:
+        np.save(output_filename,results)
+        # results_in=np.load(output_filename+".npy")
  

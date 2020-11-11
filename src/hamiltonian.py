@@ -181,37 +181,6 @@ def get_kinetic_energy(basis,hw,positive_origin=True):
     return T_matrix
 
 
-# def hamiltonian_matrix(Nmax,hw,J,interaction_filename,positive_origin=True):
-#     """
-#     Get interaction from file and constructs Hamiltonian matrix.
-
-#     Input:
-#         Nmax(int) : Nmax of basis
-#         hw (float) : Harmonic oscillator basis parameter
-#         J (float or int) :  Angular momenum of basis
-#         interaction_filename (str) : file name of interaction or identifier 
-#                 if "toy_hamiltonian", matrix constructed for toy deuteron problem
-#                     of [REF]
-
-#     Returns: 
-#         Hamiltonian matrix
-#     """
-#     if interaction_filename=="toy_hamiltonian":
-#         basis=generate_relative_states(Nmax,J,L0=0)
-#         V_matrix=toy_interaction(basis)
-#         hw=7
-#         positive_origin=False
-
-#     else:
-#         basis=generate_relative_states(Nmax,J)
-#         V_matrix=get_interaction(interaction_filename,basis)
-    
-#     #Construct kinetic eneryg matrix 
-#     T_matrix=get_kinetic_energy(basis,hw,positive_origin)
-    
-#     return T_matrix+V_matrix
-
-
 def toy_hamiltonian(basis):
     return get_kinetic_energy(basis,hw=7.0,positive_origin=False)+toy_interaction(basis)
 
