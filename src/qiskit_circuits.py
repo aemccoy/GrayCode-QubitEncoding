@@ -314,6 +314,7 @@ def main():
     circuit=variational_circuit(encoding,thetas,measurement_idx,"qasm_simulator",num_cnot_pairs=1,num_folding=1)
     circuit.draw(output="mpl",filename="circuit.pdf")
 
+
 if(__name__ == "__main__"):
     main()
 
