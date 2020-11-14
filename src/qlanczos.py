@@ -38,17 +38,31 @@ def normalization_coefficients(Ccoefs):
     return ncoefs
 
 
-def Krylov_indices(ncoefs,krylov_threshold=.99999,starting_index=0):
-    krylov_indices=[starting_index]
-    for i in range(starting_index+2,len(ncoefs),2):
-        j=krylov_indices[-1]
-        k=int((i+j)/2)
-        regularization_factor=(ncoefs[i]*ncoefs[j])/(ncoefs[k]**2)
-        if regularization_factor<krylov_threshold:
+def Krylov_indices(ncoefs,krylov_threshold=.99999,reverse_order=True,verbose=False):
+    krylov_indices=[]
+
+    if reverse_order:
+        possible_indices=range(len(ncoefs)-1,0,-2)
+    else:
+        possible_indices=range(0,len(ncoefs),2)
+
+
+    for i in possible_indices:
+        keep=True
+        for j in krylov_indices:
+            k=int((i+j)/2)
+            regularization_factor=(ncoefs[i]*ncoefs[j])/(ncoefs[k]**2)
+            
+            if verbose:
+                print(i,j,regularization_factor)
+
+            if regularization_factor>krylov_threshold:
+                keep=False
+        if keep:        
             krylov_indices.append(i)
     return krylov_indices
 
-def Krylov_matrices(krylov_indices,ncoefs,energies,threshold=1e-2):
+def Krylov_matrices(krylov_indices,ncoefs,energies,zero_threshold=1e-2):
     dim=len(krylov_indices)
     
     ## Construct overlap matrix
@@ -64,7 +78,7 @@ def Krylov_matrices(krylov_indices,ncoefs,energies,threshold=1e-2):
     eigs,evecs=eig(T)
     D=np.zeros((dim,dim))
     for i in range(dim):
-        if abs(eigs[i].real)>threshold:
+        if abs(eigs[i].real)>zero_threshold:
             D[i,i]=eigs[i]
             
     T=np.dot(evecs.transpose(),np.dot(D,evecs))  
@@ -80,23 +94,18 @@ def Krylov_matrices(krylov_indices,ncoefs,energies,threshold=1e-2):
             
     return T,H
 
-def do_QLanczos(Ccoefs,energies,krylov_threshold=0.99999,starting_index=0):
+def do_QLanczos(Ccoefs,energies,krylov_threshold=0.999,zero_threshold=1e-2,reverse_order=True):
     ## Do QLanczos on computed vectors 
     ncoefs=normalization_coefficients(Ccoefs)
-    krylov_indices=Krylov_indices(ncoefs,krylov_threshold=krylov_threshold,starting_index=starting_index)
+    krylov_indices=Krylov_indices(ncoefs,krylov_threshold=krylov_threshold,reverse_order=True)
     print(f"Dim Krylov space: {len(krylov_indices)}")
     ## Construct H and overlap matrix T in Krylov basis
-    T_krylov,H_krylov=Krylov_matrices(krylov_indices,ncoefs,energies,threshold=.5)
+    T_krylov,H_krylov=Krylov_matrices(krylov_indices,ncoefs,energies,zero_threshold=zero_threshold)
     
     ## Solve generalized eigenproblem
     eigs,vecs=eig(H_krylov,T_krylov)
 
-    # ## Identify the return lowest eigenvalue
-    # idx = eigs.argsort()[0]
-    # return eigs[idx].real
-
     return eigs.real
-
 
 
 def eliminate_outliers(energies):
@@ -137,3 +146,4 @@ def analyze_qlanczos_results(results_filename):
     averages=np.mean(corrected_results)
     stdevs=np.std(corrected_results)
     return averages,stdevs
+
