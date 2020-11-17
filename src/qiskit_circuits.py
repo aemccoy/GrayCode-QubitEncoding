@@ -84,22 +84,22 @@ def initialize_circuit(q,c,initial_state="single_state",encoding="gray_code"):
     return circuit
 
 
-def fold_circuit(circuit,num_folding):
+def fold_circuit(circuit,number_circuit_folds):
     """
-    Applies and then inverts circuit num_folding times before finally running the circuit
+    Applies and then inverts circuit number_circuit_folds times before finally running the circuit
     Used for error extrapolation? 
     
     Input:
         circuit (QuantumCircuit) : quantum circuit 
         
-        num_folding (int) : Number of times circuit is "folded"
+        number_circuit_folds (int) : Number of times circuit is "folded"
         
     Returns:
         circuit (QuantumCircuit) : folded circuit
     
     """
     folded_circuit=circuit
-    for n in range(num_folding):
+    for n in range(number_circuit_folds):
         folded_circuit=folded_circuit.combine(circuit.inverse())
         folded_circuit=folded_circuit.combine(circuit)
     return folded_circuit
@@ -242,7 +242,7 @@ def append_measurement_basis_rotation(circuit,q,measurement_id):
     return circuit
 
 
-def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pairs=0,num_folding=0):
+def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pairs=0,number_circuit_folds=0):
     """
     Construct variational circuit 
 
@@ -273,7 +273,7 @@ def variational_circuit(encoding,thetas,measurement_idx,backend_name,num_cnot_pa
     if backend_name=="qasm_simulator":
 #         print(f"m idx: {measurement_idx}")
         circuit=append_measurement_basis_rotation(circuit,q,measurement_idx)
-    circuit=fold_circuit(circuit,num_folding=num_folding)
+    circuit=fold_circuit(circuit,number_circuit_folds=number_circuit_folds)
     if backend_name=="qasm_simulator":
         circuit.measure(q,c)
     
@@ -315,6 +315,7 @@ def get_operator_list_from_qasm_string(qasm_string,classical_registers=False):
     ## Iterate through remaining operators and if not a measurement,
     ## Reformat operator string and break up into terms 
     operators=[]
+    pi_conversions={'pi/2':np.pi/2,'-pi/2':-np.pi/2,'pi':np.pi, '-pi':-np.pi}
     for op in circuit_strings[gate_starting_index:]:
     #     print("\n"+op)
         op=op.replace("u2(0,pi)","h")
@@ -324,6 +325,7 @@ def get_operator_list_from_qasm_string(qasm_string,classical_registers=False):
             op=op.replace(s," ")
         op=op.split()
         if len(op)>0 and op[0]!='measure':
+            op=[pi_conversions[e] if e in pi_conversions else e for e in op]
             operators.append(op)
     return operators
 
@@ -352,6 +354,10 @@ def append_circuit_from_qasm_list(circuit,q,operators,num_cnot_pairs=0):
             circuit.ry(float(op[1]),int(op[2]))
         elif op[0] == "u1":
             circuit.u1(float(op[1]),int(op[2]))
+        elif op[0] == "u2":
+            circuit.u2(float(op[1]),float(op[2]),int(op[3]))
+        elif op[0] == "u3":
+            circuit.u3(float(op[1]),float(op[2]),float(op[3]),int(op[4]))
         elif op[0] == "r":
             if op[2] == "pi/2":
                 circuit.ry(float(op[1]),int(op[3]))
@@ -361,7 +367,7 @@ def append_circuit_from_qasm_list(circuit,q,operators,num_cnot_pairs=0):
                 circuit.r(float(op[1]),float(op[2]),int(op[3]))
         
         else:
-            raise ValueError(f"Gate {op[0]} not implemented.")
+            raise ValueError(f"Gate {op} not implemented.")
     return circuit
 
 
@@ -403,7 +409,7 @@ def main():
     measurement_idx="X"*N_qubits
     thetas = np.random.uniform(low=-np.pi/2, high=np.pi/2,size=N_states-1)
 
-    circuit=variational_circuit(encoding,thetas,measurement_idx,"qasm_simulator",num_cnot_pairs=1,num_folding=1)
+    circuit=variational_circuit(encoding,thetas,measurement_idx,"qasm_simulator",num_cnot_pairs=1,number_circuit_folds=1)
     circuit.draw(output="mpl",filename="circuit.pdf")
 
 

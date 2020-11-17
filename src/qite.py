@@ -10,6 +10,7 @@ from qiskit.quantum_info import Pauli
 from qiskit.aqua.operators import WeightedPauliOperator
 from qiskit.aqua.components.initial_states import Custom
 
+from device import *
 from hamiltonian import *
 from utils import *
 from qiskit_circuits import *
@@ -36,20 +37,20 @@ def set_qite_parameters(parameters, verbose=True):
                       'delta_time' : .01,
                       'merge_step' : None,
                       'qlanczos' : False,
-                      'krylov_threshold' : 0.99999, ## thresold for QLanczos regularization factor
+                      'krylov_threshold' : 0.99, ## thresold for QLanczos regularization factor
                       'qite_threshold' : 1e-2, ## threshold for lstsq solver
                       'qlanczos_threshold':1e-2, ## threshold for eigenvalues set to zero
                       'backend' : 'statevector_simulator',
                       'N_shots' : 10000,
                       'device_name' : None,
                       'mitigate_meas_error' : False,
-                      'N_cpus' : 1,
-                      'output_dir': 'outputs',
                       'layout' : None,
                       'show_progress' : True,
-                      'number_cnot_pairs':0,
-                      'number_circuit_folding':0,
-                      'zero_noise_extrapolation':False
+                      'number_cnot_pairs': 0,
+                      'number_circuit_folds': 0,
+                      'zero_noise_extrapolation': False,
+                      'N_cpus' : 1,
+                      'output_dir': 'outputs'
                       }
 
     # Check for valid encoding and backend
@@ -201,72 +202,13 @@ def get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms):
 
     return pauli_set
 
-
-
-def run_circuit_statevector(
-        n_qubits,
-        evolution_operators,
-        time,
-        initialization=None,
-        encoding="gray_code",
-        number_cnot_pairs=0
+def A_pauli_operator(
+        delta_time,sigmas,S_pauli_terms,b_pauli_terms,
+        expectation_values,Ccoef,A_threshold,verbose=False
     ):
-        ## Initalize circuit
-#         print("qubits ", n_qubits)
-        q = QuantumRegister(n_qubits)
-        c = ClassicalRegister(n_qubits)
-        
-        circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
-
-        ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
-        if len(evolution_operators)>0:
-            circuit=append_evolution_circuit(q,evolution_operators,time,circuit,number_cnot_pairs)
-
-
-        ## Execute circuit
-        job = execute(circuit, Aer.get_backend("statevector_simulator"))
-        
-        return job.result().get_statevector(circuit)        
-
-    
-def run_circuit_qasm(
-        n_qubits,
-        evolution_operators,
-        pauli_id,
-        time,
-        n_shots=1024,
-        initialization=None,
-        encoding="gray_code",
-        number_cnot_pairs=0
-    ):
-        ## Initalize circuit
-        q = QuantumRegister(n_qubits)
-        c = ClassicalRegister(n_qubits)
-        
-        circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
-
-        ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
-        if len(evolution_operators)>0:
-            circuit=append_evolution_circuit(q,evolution_operators,time,circuit,number_cnot_pairs)
-        
-        ## Rotate to measurement basis 
-        circuit=append_measurement_basis_rotation(circuit,q,pauli_id)       
-        circuit.measure(q,c)
-
-        ## Execute circuit
-        job = execute(circuit, Aer.get_backend("qasm_simulator"),shots=n_shots)
-        
-        ## Get counts
-        counts= job.result().get_counts(circuit)
-
-        ##normalize counts
-        for state in counts:
-            counts[state]=counts[state]/n_shots
-        
-        return counts
-
-def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold,verbose=False):
-        
+    """
+    Hermitian operator such that exp[-iAt]|psi>~exp[-Ht]|psi>
+    """
     
     n_qubits=sigmas[0].num_qubits
 
@@ -323,114 +265,152 @@ def A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_v
     return A
 
 
-def qite_experiment(
-        H,time_steps,
-        delta_time,
-        backend,
-        initialization,
+def run_circuit_statevector(
+        n_qubits,
+        evolution_operators,
+        time,
+        initialization=None,
         encoding="gray_code",
-        A_threshold=1e-2,
-        krylov_threshold=0.99999,
-        cstep=None,
-        show_progress=True,
-        n_shots=10000,
-        QLanczos=False,
-        number_cnot_pairs=0
+        number_cnot_pairs=0,
+        number_circuit_folds=0
     ):
-    """
-    Run qite evolution to get energies of ground state 
-    """
-    n_qubits=H.N_qubits
+        ## If num_cnot_pairs>0, then do extrapolation is cnot, 
+        ## otherwise if number_circuit_folds>0 do extrapolation by folding the circuit
+        if number_cnot_pairs!=0:
+            number_circuit_folds=0
+        if number_circuit_folds!=0:
+            number_cnot_pairs=0        
 
-    ## Get list of sigmas (all pauli terms with odd number Y gates)
-    sigmas=sigma_terms(n_qubits,encoding)
+        ## Initalize circuit
+        q = QuantumRegister(n_qubits)
+        c = ClassicalRegister(n_qubits)
+        circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
 
-    ## Construct b and S in terms of paulis form sigmas 
-    b_pauli_terms=b_terms(H,sigmas)
-    S_pauli_terms=S_terms(sigmas)
+        ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
+        if len(evolution_operators)>0:
+            circuit=append_evolution_circuit(q,evolution_operators,time,circuit,number_cnot_pairs)
 
-    ## Get commuting set of pauli terms 
-    pauli_set=get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms)
-    commuting_sets=get_commuting_sets(sorted(pauli_set))
+        ## Apply folding if number_circuit_folds>0
+        circuit=fold_circuit(circuit,number_circuit_folds=number_circuit_folds)
+
+        ## Execute circuit
+        job = execute(circuit, backend=Aer.get_backend("statevector_simulator"),shots=1)
+        
+        return job.result().get_statevector(circuit)        
+
     
-    ## Zero initialize 
-    evolution_set=[]
-    a=np.zeros(len(sigmas))
-    Energies=np.zeros(time_steps)
-    Ccoefs=np.zeros(time_steps)
-    ## for each time step, run circuit and compute A for the next time step
-    
-    if show_progress:
-        time_range=tqdm(range(time_steps))
-    else:
-        time_range=range(time_steps)
+def run_circuit_qasm(
+        n_qubits,
+        evolution_operators,
+        pauli_id,
+        time,
+        n_shots=100000,
+        initialization=None,
+        encoding="gray_code",
+        noise_model=None,
+        device=None,
+        extrapolation=None,
+        num_extrapolation_steps=0
+    ):
 
-    for t in time_range:
-        expectation_values={}
-        if backend=='statevector_simulator':
-            ## Run circuit to get state vector
-            psi=run_circuit_statevector(
-                    n_qubits,evolution_set,delta_time,
-                    initialization=initialization,encoding=encoding,
-                    number_cnot_pairs=number_cnot_pairs
+        if extrapolation == None:
+            assert(num_extrapolation_steps==0)
+        
+        noisy_counts={}
+        xs=[]
+        number_cnot_pairs=0
+        number_circuit_folds=0
+        for n in range(num_extrapolation_steps+1):
+
+            if extrapolation == "cnot_pairs": number_cnot_pairs=n
+            elif extrapolation == "circuit_folding": number_circuit_folds=n
+
+            ## Initalize circuit
+            q = QuantumRegister(n_qubits)
+            c = ClassicalRegister(n_qubits)
+            
+            circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
+
+            ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
+            if len(evolution_operators)>0:
+                circuit=append_evolution_circuit(q,evolution_operators,time,circuit,number_cnot_pairs)
+            
+            ## Rotate to measurement basis 
+            circuit=append_measurement_basis_rotation(circuit,q,pauli_id) 
+
+            ## Fold circuit if number_circuit_folds>0 
+            circuit=fold_circuit(circuit,number_circuit_folds=number_circuit_folds)   
+
+            ## Add final measurement
+            circuit.measure(q,c)
+
+            ## Execute circuit
+            if noise_model != None:
+                job = execute(
+                        circuit, 
+                        backend=Aer.get_backend("qasm_simulator"),
+                        shots=n_shots,
+                        noise_model=noise_model,
+                        basis_gates=noise_model.basis_gates,
+                        optimization_level=0
+                        )
+            elif device != None:
+                job = execute(
+                        circuit, 
+                        backend=Aer.get_backend("qasm_simulator"),
+                        shots=n_shots,
+                        noise_model=device.noise_model,
+                        basis_gates=device.noise_model.basis_gates,
+                        coupling_map=device.coupling_map,
+                        initial_layout=device.layout,
+                        optimization_level=0
+                        )
+            else:
+                job = execute(circuit, 
+                    backend=Aer.get_backend("qasm_simulator"),
+                    shots=n_shots,
+                    optimization_level=0
                     )
 
-            ## Compute expectation value for each pauli term 
-            for pauli_id in commuting_sets:        
-                for pauli in commuting_sets[pauli_id]: 
-                    pauli_mat = get_pauli_matrix(pauli)
-                    e_value=np.conj(psi).T @ pauli_mat @ psi
-                    expectation_values[pauli]=e_value
+            
+            ## Get counts
+            counts=job.result().get_counts(circuit)
+            ## populate dictionary for extrapolation 
+            
+                
+            for state in counts:
+                if state not in noisy_counts:
+                    noisy_counts[state]=np.zeros(num_extrapolation_steps+1)
+                
+                noisy_counts[state][n]=counts[state]
+                
+            xs.append(2*n+1)
+
+        ## if extrapolation not None, do extrapolation for each set of counts 
+        if extrapolation != None:
+            for state in noisy_counts:
+                ## normalize counts 
+                noisy_counts[state]=[count/n_shots for count in noisy_counts[state]]
+                print(noisy_counts[state])
+                coef=np.polyfit(xs,noisy_counts[state],1)
+                linear_fit=np.poly1d(coef)
+                print("extrapolated value ",linear_fit(0))
+                ## Evaluate linear_fit polynomial at zero to get extrapolated number of counts
+                ## Replace value in counts with extrapolated value 
+                counts[state]=linear_fit(0) 
+        
+        ## if extraplation is None, then counts is simply the counts dictionary evaluated 
+        ## in the circuit, which is only evaluated one time
 
         else:
-            for pauli_id in commuting_sets:   
-                ## Run circuit to get counts 
-                meas_results=run_circuit_qasm(
-                                n_qubits,evolution_set,pauli_id,delta_time,
-                                n_shots=n_shots,initialization=initialization,
-                                encoding=encoding,number_cnot_pairs=number_cnot_pairs
-                                )
-
-                ## Compute expectation value for each pauli term 
-                for pauli in commuting_sets[pauli_id]: 
-                    expectation_values[pauli]=compute_expectation_value(pauli,meas_results)    
-
-
-        ## Compute energy
-        H_pauli=H.pauli_coeffs
-        for key in H_pauli:
-            Energies[t]+=H_pauli[key]*expectation_values[key]
-
-        ## compute normalization coef C=1-2*E*delta_times
-        Ccoef=1-2*delta_time*Energies[t]
-        Ccoefs[t]=Ccoef
-
-        ## Compute A
-        evolution_set.append(A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold))
-
-        if isinstance(cstep,int):
-            if t%cstep==0:
-                identity_string="I"*n_qubits
-                A_combine=WeightedPauliOperator([(0.0,Pauli.from_label(identity_string))])
-                for A in evolution_set:
-                    A_combine+=A
-                evolution_set=[A_combine]
-
-    ## Just return calculated energies
-    if not QLanczos:
-        return Energies
-    ## Otherwise, do QLanczos calculation
-
-    else:
-        ## Do QLanczos on computed vectors 
-        qlanczos_energy=do_QLanczos(Ccoefs,Energies,krylov_threshold=krylov_threshold)
-
-        return Energies,qlanczos_energy
-
-
+            ##normalize counts
+            for state in counts:
+                counts[state]=counts[state]/n_shots
+        
+        return counts
 
 ###########################################################################################
-def qite_experiment2(H,parameters):
+def qite_experiment(H,parameters,verbose=False):
     """
     Run qite evolution to get energies of ground state 
     """
@@ -445,7 +425,21 @@ def qite_experiment2(H,parameters):
     show_progress=parameters['show_progress']
     n_shots=parameters['N_shots']
     QLanczos=parameters['qlanczos']
+
+
     number_cnot_pairs=parameters['number_cnot_pairs']
+    number_circuit_folds=parameters['number_circuit_folds']
+    
+    num_extrapolation_steps=0
+    extrapolation=None
+    if number_cnot_pairs>0:
+        extrapolation="cnot_pairs"
+        num_extrapolation_steps=number_cnot_pairs
+    elif number_circuit_folds>0:
+        extrapolation="circuit_folding"
+        num_extrapolation_steps=number_circuit_folds
+
+
     ## Get number of qubits 
     n_qubits=H.N_qubits
 
@@ -460,13 +454,30 @@ def qite_experiment2(H,parameters):
     pauli_set=get_intersection_pauli_terms(H,b_pauli_terms,S_pauli_terms)
     commuting_sets=get_commuting_sets(sorted(pauli_set))
     
-    ## Zero initialize 
+    ## Zero initialize containers
     evolution_set=[]
     a=np.zeros(len(sigmas))
     Energies=np.zeros(time_steps)
     Ccoefs=np.zeros(time_steps)
+
+    ## Construct noise model
+    noise_model=None
+    device=None
+    if parameters['device_name'] is not None:
+        if ( parameters['device_name'][0:6] == "custom" ):
+            errors=[float(i) for i in parameters['device_name'][6:].split("_")]
+            noise_model=create_custom_noise_model(errors)
+        else:
+            device = Device(parameters['device_name'], parameters['mitigate_meas_error'], 
+                            H.N_qubits, layout=parameters['layout'])
+            
+    ## TODO:  Conver to print to logfile 
+    if verbose:
+        if device is not None:
+            print("Device specifications")
+            pprint(vars(device))
+
     ## for each time step, run circuit and compute A for the next time step
-    
     if show_progress:
         time_range=tqdm(range(time_steps))
     else:
@@ -478,8 +489,10 @@ def qite_experiment2(H,parameters):
             ## Run circuit to get state vector
             psi=run_circuit_statevector(
                     n_qubits,evolution_set,delta_time,
-                    initialization=initialization,encoding=encoding,
-                    number_cnot_pairs=number_cnot_pairs
+                    initialization=initialization,
+                    encoding=encoding,
+                    number_cnot_pairs=number_cnot_pairs,
+                    number_circuit_folds=number_circuit_folds
                     )
 
             ## Compute expectation value for each pauli term 
@@ -493,9 +506,15 @@ def qite_experiment2(H,parameters):
             for pauli_id in commuting_sets:   
                 ## Run circuit to get counts 
                 meas_results=run_circuit_qasm(
-                                n_qubits,evolution_set,pauli_id,delta_time,
-                                n_shots=n_shots,initialization=initialization,
-                                encoding=encoding,number_cnot_pairs=number_cnot_pairs
+                                n_qubits,evolution_set,
+                                pauli_id,delta_time,
+                                n_shots=n_shots,
+                                initialization=initialization,
+                                encoding=encoding,
+                                noise_model=noise_model,
+                                device=device,
+                                extrapolation=extrapolation,
+                                num_extrapolation_steps=num_extrapolation_steps
                                 )
 
                 ## Compute expectation value for each pauli term 
@@ -515,6 +534,7 @@ def qite_experiment2(H,parameters):
         ## Compute A
         evolution_set.append(A_pauli_operator(delta_time,sigmas,S_pauli_terms,b_pauli_terms,expectation_values,Ccoef,A_threshold))
 
+        ## Merge evolution operators if time step is a merge step
         if isinstance(merge_step,int):
             if t%merge_step==0:
                 identity_string="I"*n_qubits

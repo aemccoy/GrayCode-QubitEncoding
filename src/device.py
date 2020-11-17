@@ -24,6 +24,27 @@ supported_devices = [
     "ibmq_vigo"
 ]
 
+
+def get_device_from_ibmq(device_filename):
+    # Log into IBMQ using stored account information 
+    provider = IBMQ.load_account()
+    provider.backends()
+
+    # get device information 
+    device = provider.get_backend(self.name)
+    properties = device.properties()
+
+    # Get coupling map and noise model 
+    coupling_map = device.configuration().coupling_map
+    noise_model = noise.NoiseModel.from_backend(properties)
+
+    # Write tuple contianing coupling map and noise model (converted to dictionary) to file 
+    device_write = (coupling_map, noise_model.to_dict())
+
+    with open(f'{device_filename}','wb') as out_file:
+        doc = pickle.dump(device_write, out_file)
+
+
 class Device():
     def __init__(self, device_name=None, mitigate_meas_error=False, N_qubits=0, layout=None):
         # Default set of parameters
@@ -31,6 +52,7 @@ class Device():
         self.mitigate_meas_error = mitigate_meas_error
         self.coupling_map = None
         self.noise_model = None
+        self.filename = None
         self.meas_filter = None
         self.layout = layout
 
@@ -47,7 +69,7 @@ class Device():
 
         # If we actually have a device to deal with, do everything else
         if self.name is not None:
-            self.read_device()
+            directory=self.read_device()
 
             if self.mitigate_meas_error:
                 if N_qubits <= 0:
@@ -60,14 +82,16 @@ class Device():
                 else:
                     calibration_file = f"device_{self.name}_calibration_{N_qubits}qubits.pkl" 
 
-                if calibration_file not in os.listdir('devices'):
+                # if calibration_file not in os.listdir('devices'):
+                # print(directory)
+                if calibration_file not in os.listdir(directory):
                     print(f"Calibration file not found; creating calibration file at {calibration_file}")
                     self.meas_filter = self.initialize_meas_calibration(N_qubits, layout)
-                    with open("devices/" + calibration_file, "wb") as out_file:
+                    with open(f"{directory}/{calibration_file}", "wb") as out_file:
                         pickle.dump(self.meas_filter, out_file)
                 else:
                     print(f"Calibration file found; reading calibration data from {calibration_file}")
-                    with open("devices/" + calibration_file, "rb") as in_file:
+                    with open(f"{directory}/{calibration_file}", "rb") as in_file:
                         self.meas_filter = pickle.load(in_file)
         
 
@@ -83,31 +107,25 @@ class Device():
         filename = f"device_{self.name}.pk"
 
         # Check for device information directory, create if not there
-        if "devices" not in os.listdir():        
-            os.mkdir("devices")
-           
-        # Check for whether we have already downloaded device information 
-        if filename not in os.listdir('devices'):
-            # Log into IBMQ using stored account information 
-            provider = IBMQ.load_account()
-            provider.backends()
+        if "devices" in os.listdir():
+            directory="devices"
+            
+        elif "devices" in os.listdir(".."):
+            directory='../devices'
+        else:        
+            directory="devices"
+            os.mkdir(directory)
 
-            # get device information 
-            device = provider.get_backend(self.name)
-            properties = device.properties()
+        
+        device_filename=f'{directory}/{filename}'
 
-            # Get coupling map and noise model 
-            coupling_map = device.configuration().coupling_map
-            noise_model = noise.NoiseModel.from_backend(properties)
+        if not os.path.exists(device_filename):
+            print(device_filename)
+            get_device_from_ibmq(device_filename)
 
-            # Write tuple contianing coupling map and noise model (converted to dictionary) to file 
-            device_write = (coupling_map, noise_model.to_dict())
-
-            with open(f'devices/{filename}','wb') as out_file:
-                doc = pickle.dump(device_write, out_file)
 
         # Read data from the file
-        with open(f'devices/{filename}', 'rb') as in_file:
+        with open(f'{device_filename}', 'rb') as in_file:
             coupling_map, model_dict = pickle.load(in_file)
 
             # Reconstruct noise model from dictionary
@@ -117,6 +135,7 @@ class Device():
             self.coupling_map = coupling_map
             self.noise_model = noise_model
 
+        return directory
 
     def initialize_meas_calibration(self, N_qubits, layout):
         """ Set up the confusion matrix needed for measurement error mitigation.

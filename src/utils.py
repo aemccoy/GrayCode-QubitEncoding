@@ -117,79 +117,7 @@ def graycode_operator(s1,s2):
 
     return expanded_sequence
 
-# def find_flipped_bit(s1, s2):
-#     """ For two adjacent elements in a gray code, determine which bit is the 
-#     one that was flipped.
 
-#     [OBSOLETE ]
-#     """
-#     if len(s1) == 0 or len(s2) == 0:
-#         raise ValueError("Empty string inputted.")
-
-#     if len(s1) != len(s2):
-#         raise ValueError("Strings compared in gray code must have the same length.")
-    
-#     if any([x != "0" and x != "1" for x in s1]) or any([x != "0" and x != "1" for x in s2]):
-#         raise ValueError(f"One of inputs {s1}, {s2} is not a valid binary string.")
-    
-#     # Sum the strings elementwise modulo 2; the sum will be 1 only in the slot 
-#     # where we flipped a bit        
-#     string_sums = [(int(s1[i]) + int(s2[i])) % 2 for i in range(len(s1))]
-
-#     if string_sums.count(1) == 0:
-#         raise ValueError(f"Strings {s1} and {s2} are the same.")
-#     elif string_sums.count(1) > 1:
-#         raise ValueError(f"Strings {s1} and {s2} are not ordered in a gray code.")
-
-#     return string_sums.index(1)
-
-
-
-
-# def expand_projector_sequence(seq):
-#     # Take a list of projectors, e.g. ["P0", "P1", "X"] and expand it in terms of Paulis 
-#     # return an openfermion QubitOperator
-
-#     # Copy the sequence before making replacements
-#     substitution_seq = seq
-
-#     if len(seq) <= 0:
-#         raise ValueError(f"Cannot expand empty projector sequence.")
-
-#     if any([x not in mats.keys() for x in seq]):
-#         raise ValueError(f"Sequence {seq} contains elements that are not Paulis or P0/P1 projectors.")  
-
-#     prefactor = 1 / (2 ** (substitution_seq.count("P0") + substitution_seq.count("P1")))
-
-#     # First, replace P0 and P1 with 0.5 (1 +- Z)
-#     for item_idx in range(len(seq)):
-#         if seq[item_idx] == "P0":
-#             substitution_seq[item_idx] = ["I", "Z"]
-#         elif seq[item_idx] == "P1":
-#             substitution_seq[item_idx] = ["I", "mZ"]
-
-#     qubit_operators = []
-
-#     # Expand out the term into individual Paulis
-#     for pauli in product(*substitution_seq):
-#         pauli_string = "".join(pauli)
-
-#         # Extract the sign and remove the m indicators
-#         sign = (-1) ** pauli_string.count("m")
-#         pauli_string = pauli_string.replace("m", "")
-
-#         # Remove identities and label Paulis with their qubit indices
-#         qubit_operator_string = ""
-#         for qubit_idx in range(len(pauli_string)):
-#             if pauli_string[qubit_idx] != "I":
-#                 qubit_operator_string += f"{pauli_string[qubit_idx]}{qubit_idx} "
-#         qubit_operators.append(QubitOperator(qubit_operator_string, sign*prefactor))
-
-#     full_operator = QubitOperator()
-#     for term in qubit_operators:
-#         full_operator += term
-
-#     return full_operator 
 
 def expand_projector_sequence(seq):
     """
@@ -366,3 +294,27 @@ def qubit_operator_to_dict(H):
         pauli_dictionary["".join(pauli_string)]=pauli_terms[pauli_term]        
 
     return pauli_dictionary
+
+
+def create_custom_noise_model(errors):
+    """
+    TODO Confirm this is correct with TM
+
+    imputs:
+        errors (list of floats) :  gate errors
+            first term in list is single qubit gate error
+            second term is two qubit gate error
+
+    """
+    noise_model = noise.NoiseModel()
+    # error1 = float(errors[1])
+    # error2 = float(errors[2])
+    error1 = errors[0]
+    error2 = errors[1]
+
+    error_1 = noise.errors.depolarizing_error(error1, 1)
+    error_2 = noise.errors.depolarizing_error(error2, 2)
+
+    noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3'])
+    noise_model.add_all_qubit_quantum_error(error_2, ['cx'])
+    return noise_model
