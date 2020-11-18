@@ -309,104 +309,106 @@ def run_circuit_qasm(
         encoding="gray_code",
         noise_model=None,
         device=None,
-        extrapolation=None,
-        num_extrapolation_steps=0
+        number_cnot_pairs=0,
+        number_circuit_folds=0
+        # extrapolation=None,
+        # num_extrapolation_steps=0
     ):
 
-        if extrapolation == None:
-            assert(num_extrapolation_steps==0)
+        # # if extrapolation == None:
+        # #     assert(num_extrapolation_steps==0)
         
-        noisy_counts={}
-        xs=[]
-        number_cnot_pairs=0
-        number_circuit_folds=0
-        for n in range(num_extrapolation_steps+1):
+        # # noisy_counts={}
+        # # xs=[]
+        # # number_cnot_pairs=0
+        # # number_circuit_folds=0
+        # # for n in range(num_extrapolation_steps+1):
 
-            if extrapolation == "cnot_pairs": number_cnot_pairs=n
-            elif extrapolation == "circuit_folding": number_circuit_folds=n
+        #     if extrapolation == "cnot_pairs": number_cnot_pairs=n
+        #     elif extrapolation == "circuit_folding": number_circuit_folds=n
 
-            ## Initalize circuit
-            q = QuantumRegister(n_qubits)
-            c = ClassicalRegister(n_qubits)
-            
-            circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
+        ## Initalize circuit
+        q = QuantumRegister(n_qubits)
+        c = ClassicalRegister(n_qubits)
+        
+        circuit=initialize_circuit(q,c,initial_state=initialization,encoding=encoding)
 
-            ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
-            if len(evolution_operators)>0:
-                circuit=append_evolution_circuit(q,evolution_operators,time,circuit,number_cnot_pairs)
-            
-            ## Rotate to measurement basis 
-            circuit=append_measurement_basis_rotation(circuit,q,pauli_id) 
+        ## If evolution_operators given, evolve cirucit exp(-iAt) for each A in evolution operators
+        if len(evolution_operators)>0:
+            circuit=append_evolution_circuit(q,evolution_operators,time,circuit,number_cnot_pairs)
+        
+        ## Rotate to measurement basis 
+        circuit=append_measurement_basis_rotation(circuit,q,pauli_id) 
 
-            ## Fold circuit if number_circuit_folds>0 
-            circuit=fold_circuit(circuit,number_circuit_folds=number_circuit_folds)   
+        ## Fold circuit if number_circuit_folds>0 
+        circuit=fold_circuit(circuit,number_circuit_folds=number_circuit_folds)   
 
-            ## Add final measurement
-            circuit.measure(q,c)
+        ## Add final measurement
+        circuit.measure(q,c)
 
-            ## Execute circuit
-            if noise_model != None:
-                job = execute(
-                        circuit, 
-                        backend=Aer.get_backend("qasm_simulator"),
-                        shots=n_shots,
-                        noise_model=noise_model,
-                        basis_gates=noise_model.basis_gates,
-                        optimization_level=0
-                        )
-            elif device != None:
-                job = execute(
-                        circuit, 
-                        backend=Aer.get_backend("qasm_simulator"),
-                        shots=n_shots,
-                        noise_model=device.noise_model,
-                        basis_gates=device.noise_model.basis_gates,
-                        coupling_map=device.coupling_map,
-                        initial_layout=device.layout,
-                        optimization_level=0
-                        )
-            else:
-                job = execute(circuit, 
+        ## Execute circuit
+        if noise_model != None:
+            job = execute(
+                    circuit, 
                     backend=Aer.get_backend("qasm_simulator"),
                     shots=n_shots,
+                    noise_model=noise_model,
+                    basis_gates=noise_model.basis_gates,
                     optimization_level=0
                     )
-
-            
-            ## Get counts
-            counts=job.result().get_counts(circuit)
-            ## populate dictionary for extrapolation 
-            
-                
-            for state in counts:
-                if state not in noisy_counts:
-                    noisy_counts[state]=np.zeros(num_extrapolation_steps+1)
-                
-                noisy_counts[state][n]=counts[state]
-                
-            xs.append(2*n+1)
-
-        ## if extrapolation not None, do extrapolation for each set of counts 
-        if extrapolation != None:
-            for state in noisy_counts:
-                ## normalize counts 
-                noisy_counts[state]=[count/n_shots for count in noisy_counts[state]]
-                print(noisy_counts[state])
-                coef=np.polyfit(xs,noisy_counts[state],1)
-                linear_fit=np.poly1d(coef)
-                print("extrapolated value ",linear_fit(0))
-                ## Evaluate linear_fit polynomial at zero to get extrapolated number of counts
-                ## Replace value in counts with extrapolated value 
-                counts[state]=linear_fit(0) 
-        
-        ## if extraplation is None, then counts is simply the counts dictionary evaluated 
-        ## in the circuit, which is only evaluated one time
-
+        elif device != None:
+            job = execute(
+                    circuit, 
+                    backend=Aer.get_backend("qasm_simulator"),
+                    shots=n_shots,
+                    noise_model=device.noise_model,
+                    basis_gates=device.noise_model.basis_gates,
+                    coupling_map=device.coupling_map,
+                    initial_layout=device.layout,
+                    optimization_level=0
+                    )
         else:
-            ##normalize counts
-            for state in counts:
-                counts[state]=counts[state]/n_shots
+            job = execute(circuit, 
+                backend=Aer.get_backend("qasm_simulator"),
+                shots=n_shots,
+                optimization_level=0
+                )
+
         
+        ## Get counts
+        counts=job.result().get_counts(circuit)
+        ## populate dictionary for extrapolation 
+        
+                
+        #     for state in counts:
+        #         if state not in noisy_counts:
+        #             noisy_counts[state]=np.zeros(num_extrapolation_steps+1)
+                
+        #         noisy_counts[state][n]=counts[state]
+                
+        #     xs.append(2*n+1)
+
+        # ## if extrapolation not None, do extrapolation for each set of counts 
+        # if extrapolation != None:
+        #     for state in noisy_counts:
+        #         ## normalize counts 
+        #         noisy_counts[state]=[count/n_shots for count in noisy_counts[state]]
+        #         print(noisy_counts[state])
+        #         coef=np.polyfit(xs,noisy_counts[state],1)
+        #         linear_fit=np.poly1d(coef)
+        #         print("extrapolated value ",linear_fit(0))
+        #         ## Evaluate linear_fit polynomial at zero to get extrapolated number of counts
+        #         ## Replace value in counts with extrapolated value 
+        #         counts[state]=linear_fit(0) 
+        
+        # ## if extraplation is None, then counts is simply the counts dictionary evaluated 
+        # ## in the circuit, which is only evaluated one time
+
+        # else:
+        ##normalize counts
+        for state in counts:
+            counts[state]=counts[state]/n_shots
+    
         return counts
 
 ###########################################################################################
@@ -430,14 +432,14 @@ def qite_experiment(H,parameters,verbose=False):
     number_cnot_pairs=parameters['number_cnot_pairs']
     number_circuit_folds=parameters['number_circuit_folds']
     
-    num_extrapolation_steps=0
-    extrapolation=None
-    if number_cnot_pairs>0:
-        extrapolation="cnot_pairs"
-        num_extrapolation_steps=number_cnot_pairs
-    elif number_circuit_folds>0:
-        extrapolation="circuit_folding"
-        num_extrapolation_steps=number_circuit_folds
+    # num_extrapolation_steps=0
+    # extrapolation=None
+    # if number_cnot_pairs>0:
+    #     extrapolation="cnot_pairs"
+    #     num_extrapolation_steps=number_cnot_pairs
+    # elif number_circuit_folds>0:
+    #     extrapolation="circuit_folding"
+    #     num_extrapolation_steps=number_circuit_folds
 
 
     ## Get number of qubits 
@@ -513,8 +515,10 @@ def qite_experiment(H,parameters,verbose=False):
                                 encoding=encoding,
                                 noise_model=noise_model,
                                 device=device,
-                                extrapolation=extrapolation,
-                                num_extrapolation_steps=num_extrapolation_steps
+                                number_cnot_pairs=number_cnot_pairs,
+                                number_circuit_folds=number_circuit_folds
+                                # extrapolation=extrapolation,
+                                # num_extrapolation_steps=num_extrapolation_steps
                                 )
 
                 ## Compute expectation value for each pauli term 
