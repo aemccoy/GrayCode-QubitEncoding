@@ -49,6 +49,7 @@ def set_qite_parameters(parameters, verbose=True):
                       'number_cnot_pairs': 0,
                       'number_circuit_folds': 0,
                       'zero_noise_extrapolation': False,
+                      'degree_extrapolation_polynomial':1,
                       'N_cpus' : 1,
                       'output_dir': 'outputs'
                       }
@@ -427,19 +428,40 @@ def qite_experiment(H,parameters,verbose=False):
     show_progress=parameters['show_progress']
     n_shots=parameters['N_shots']
     QLanczos=parameters['qlanczos']
-
-
+    do_extrapolation=parameters['zero_noise_extrapolation']
     number_cnot_pairs=parameters['number_cnot_pairs']
     number_circuit_folds=parameters['number_circuit_folds']
     
-    # num_extrapolation_steps=0
-    # extrapolation=None
-    # if number_cnot_pairs>0:
-    #     extrapolation="cnot_pairs"
-    #     num_extrapolation_steps=number_cnot_pairs
-    # elif number_circuit_folds>0:
-    #     extrapolation="circuit_folding"
-    #     num_extrapolation_steps=number_circuit_folds
+    ## If do_extrapolation == True, identify extrapolation type
+    ## TODO fix so that if do extrapolation is false, num_cnot_pairs etc.
+    ## still carried through to the end. 
+    extrapolation=None
+    num_extrapolation_steps=0
+
+    ## If do_extrapolation, energies calculated wit num cnot pairs for circuit fold 
+    ## ranging from 0 to max number and extrapolation carried out between time steps. 
+    if do_extrapolation == True:
+        if number_circuit_folds>0:
+            extrapolation="circuit_folding"
+            max_number_circuit_folds=number_circuit_folds
+            max_number_cnot_pairs=0
+            
+        elif number_cnot_pairs>0:
+            extrapolation="cnot_pairs"
+            max_number_cnot_pairs=number_cnot_pairs
+            max_number_circuit_folds=0
+        else:
+            raise ValueError("either number_circuit_folds or number_cnot_pairs must be non-zero")
+        
+        num_extrapolation_steps=max_number_circuit_folds+max_number_cnot_pairs
+        number_cnot_pairs=0
+        number_circuit_folds=0
+        print(f"Extrapolating with {extrapolation}")
+
+    ##otherwise, number_cnot_pairs or number_circuit_folds simply carried through
+    else:
+        ## only run the circuit once
+        num_extrapolation_steps=0
 
 
     ## Get number of qubits 
@@ -473,64 +495,95 @@ def qite_experiment(H,parameters,verbose=False):
             device = Device(parameters['device_name'], parameters['mitigate_meas_error'], 
                             H.N_qubits, layout=parameters['layout'])
             
-    ## TODO:  Conver to print to logfile 
+    ## TODO:  Convert to print to logfile 
     if verbose:
         if device is not None:
             print("Device specifications")
             pprint(vars(device))
 
     ## for each time step, run circuit and compute A for the next time step
+    ## If do extrapolation set to true, extrapolate energies after each time step
     if show_progress:
         time_range=tqdm(range(time_steps))
     else:
         time_range=range(time_steps)
 
     for t in time_range:
-        expectation_values={}
-        if backend=='statevector_simulator':
-            ## Run circuit to get state vector
-            psi=run_circuit_statevector(
-                    n_qubits,evolution_set,delta_time,
-                    initialization=initialization,
-                    encoding=encoding,
-                    number_cnot_pairs=number_cnot_pairs,
-                    number_circuit_folds=number_circuit_folds
-                    )
+        energies_for_extrapolation=[]
 
-            ## Compute expectation value for each pauli term 
-            for pauli_id in commuting_sets:        
-                for pauli in commuting_sets[pauli_id]: 
-                    pauli_mat = get_pauli_matrix(pauli)
-                    e_value=np.conj(psi).T @ pauli_mat @ psi
-                    expectation_values[pauli]=e_value
+        
+        for num in range(num_extrapolation_steps+1):
+            if extrapolation == "circuit_folding":
+                number_circuit_folds=num 
+            ## If extrapolation = cnot_pairs or None, set number_cnot_pairs to num
+            ## If extrapolation is None, number_cnot_pairs is just set to zero. 
+            else:
+                number_cnot_pairs=num
 
-        else:
-            for pauli_id in commuting_sets:   
-                ## Run circuit to get counts 
-                meas_results=run_circuit_qasm(
-                                n_qubits,evolution_set,
-                                pauli_id,delta_time,
-                                n_shots=n_shots,
-                                initialization=initialization,
-                                encoding=encoding,
-                                noise_model=noise_model,
-                                device=device,
-                                number_cnot_pairs=number_cnot_pairs,
-                                number_circuit_folds=number_circuit_folds
-                                # extrapolation=extrapolation,
-                                # num_extrapolation_steps=num_extrapolation_steps
-                                )
+            expectation_values={}
+            if backend=='statevector_simulator':
+                ## Run circuit to get state vector
+                psi=run_circuit_statevector(
+                        n_qubits,evolution_set,delta_time,
+                        initialization=initialization,
+                        encoding=encoding,
+                        number_cnot_pairs=number_cnot_pairs,
+                        number_circuit_folds=number_circuit_folds
+                        )
 
                 ## Compute expectation value for each pauli term 
-                for pauli in commuting_sets[pauli_id]: 
-                    expectation_values[pauli]=compute_expectation_value(pauli,meas_results)    
+                for pauli_id in commuting_sets:        
+                    for pauli in commuting_sets[pauli_id]: 
+                        pauli_mat = get_pauli_matrix(pauli)
+                        e_value=np.conj(psi).T @ pauli_mat @ psi
+                        expectation_values[pauli]=e_value
+
+            else:
+                for pauli_id in commuting_sets:   
+                    ## Run circuit to get counts 
+                    meas_results=run_circuit_qasm(
+                                    n_qubits,evolution_set,
+                                    pauli_id,delta_time,
+                                    n_shots=n_shots,
+                                    initialization=initialization,
+                                    encoding=encoding,
+                                    noise_model=noise_model,
+                                    device=device,
+                                    number_cnot_pairs=number_cnot_pairs,
+                                    number_circuit_folds=number_circuit_folds
+                                    )
+
+                    ## Compute expectation value for each pauli term 
+                    for pauli in commuting_sets[pauli_id]: 
+                        expectation_values[pauli]=compute_expectation_value(pauli,meas_results)    
 
 
-        ## Compute energy
-        H_pauli=H.pauli_coeffs
-        for key in H_pauli:
-            Energies[t]+=H_pauli[key]*expectation_values[key]
+            ## Compute energy
+            H_pauli=H.pauli_coeffs
+            energy=0.0
+            for key in H_pauli:
+                energy+=H_pauli[key]*expectation_values[key]
 
+            energies_for_extrapolation.append(energy.real)
+        
+        ## If extrapolation == None then circuit only run once with num=0
+        ## Don't do extrapolation if t==0
+        if (extrapolation == None) or (t==0):
+            Energies[t]=energies_for_extrapolation[0]
+        
+        ## Otherwise, do extraplation first
+        else:
+            ## Do extrapolation
+            x=[2*n+1 for n in range(num_extrapolation_steps+1)]
+            ##TODO make polynomial degrees a function
+            poly_degree=parameters['degree_extrapolation_polynomial']
+            coef=np.polyfit(x,energies_for_extrapolation,poly_degree)
+            fit=np.poly1d(coef)
+            ## Extrapolated energy is y intercept at x=0
+            extrapolated_energy=fit(0)
+            # print(energies_for_extrapolation)
+            Energies[t]=extrapolated_energy
+            # print(Energies[t])
         ## compute normalization coef C=1-2*E*delta_times
         Ccoef=1-2*delta_time*Energies[t]
         Ccoefs[t]=Ccoef
