@@ -28,30 +28,30 @@ def set_qite_parameters(parameters, verbose=True):
         parameters : Updated parameters to include default parameters not given by input file
     """
     default_parameters = {
-                      'Nmax' : 0,
-                      'interaction':"toy",
-                      'encoding' : 'gray_code',
-                      'initialization' : 'single_state',
-                      'N_trials' : 1,
-                      'N_time_steps': 1,
-                      'delta_time' : .01,
-                      'merge_step' : None,
-                      'qlanczos' : False,
-                      'krylov_threshold' : 0.99, ## thresold for QLanczos regularization factor
-                      'qite_threshold' : 1e-2, ## threshold for lstsq solver
-                      'qlanczos_threshold':1e-2, ## threshold for eigenvalues set to zero
-                      'backend' : 'statevector_simulator',
-                      'N_shots' : 10000,
-                      'device_name' : None,
-                      'mitigate_meas_error' : False,
-                      'layout' : None,
-                      'show_progress' : True,
-                      'number_cnot_pairs': 0,
-                      'number_circuit_folds': 0,
-                      'zero_noise_extrapolation': False,
-                      'degree_extrapolation_polynomial':1,
-                      'N_cpus' : 1,
-                      'output_dir': 'outputs'
+                        'backend' : 'statevector_simulator',
+                        'degree_extrapolation_polynomial':1,
+                        'delta_time' : .01,
+                        'device_name' : None,
+                        'encoding' : 'gray_code',
+                        'initialization' : 'single_state',
+                        'interaction':"toy",
+                        'krylov_threshold' : 0.99, ## thresold for QLanczos regularization factor
+                        'layout' : None,
+                        'merge_step' : None,
+                        'mitigate_meas_error' : False,
+                        'Nmax' : 0,
+                        'N_circuit_folds': 0,
+                        'N_cnot_pairs': 0,
+                        'N_cpus' : 1,
+                        'N_shots' : 10000,
+                        'N_time_steps': 1,
+                        'N_trials' : 1,
+                        'output_dir': 'outputs',
+                        'qlanczos' : False,
+                        'qlanczos_threshold':1e-2, ## threshold for eigenvalues set to zero
+                        'qite_threshold' : 1e-2, ## threshold for lstsq solver
+                        'show_progress' : True,
+                        'zero_noise_extrapolation': False
                       }
 
     # Check for valid encoding and backend
@@ -378,6 +378,12 @@ def run_circuit_qasm(
         
         ## Get counts
         counts=job.result().get_counts(circuit)
+
+        # Perform measurement error mitigation if specified
+        if device is not None:
+            if device.meas_filter:
+                counts = device.meas_filter.apply(counts)
+
         ## populate dictionary for extrapolation 
         
                 
@@ -412,6 +418,15 @@ def run_circuit_qasm(
     
         return counts
 
+
+def extrapolate_to_zero_noise(values,poly_degree):
+    ## Do extrapolation
+    x=[2*n+1 for n in range(len(values))]
+    coef=np.polyfit(x,values,poly_degree)
+    fit=np.poly1d(coef)
+    return fit(0)
+    
+
 ###########################################################################################
 def qite_experiment(H,parameters,verbose=False):
     """
@@ -429,8 +444,8 @@ def qite_experiment(H,parameters,verbose=False):
     n_shots=parameters['N_shots']
     QLanczos=parameters['qlanczos']
     do_extrapolation=parameters['zero_noise_extrapolation']
-    number_cnot_pairs=parameters['number_cnot_pairs']
-    number_circuit_folds=parameters['number_circuit_folds']
+    number_cnot_pairs=parameters['N_cnot_pairs']
+    number_circuit_folds=parameters['N_circuit_folds']
     
     ## If do_extrapolation == True, identify extrapolation type
     ## TODO fix so that if do extrapolation is false, num_cnot_pairs etc.
@@ -539,6 +554,8 @@ def qite_experiment(H,parameters,verbose=False):
                         expectation_values[pauli]=e_value
 
             else:
+                
+
                 for pauli_id in commuting_sets:   
                     ## Run circuit to get counts 
                     meas_results=run_circuit_qasm(
@@ -557,7 +574,6 @@ def qite_experiment(H,parameters,verbose=False):
                     for pauli in commuting_sets[pauli_id]: 
                         expectation_values[pauli]=compute_expectation_value(pauli,meas_results)    
 
-
             ## Compute energy
             H_pauli=H.pauli_coeffs
             energy=0.0
@@ -573,17 +589,12 @@ def qite_experiment(H,parameters,verbose=False):
         
         ## Otherwise, do extraplation first
         else:
-            ## Do extrapolation
-            x=[2*n+1 for n in range(num_extrapolation_steps+1)]
-            ##TODO make polynomial degrees a function
             poly_degree=parameters['degree_extrapolation_polynomial']
-            coef=np.polyfit(x,energies_for_extrapolation,poly_degree)
-            fit=np.poly1d(coef)
-            ## Extrapolated energy is y intercept at x=0
-            extrapolated_energy=fit(0)
-            # print(energies_for_extrapolation)
-            Energies[t]=extrapolated_energy
-            # print(Energies[t])
+            Energies[t]=extrapolate_to_zero_noise(energies_for_extrapolation,poly_degree)
+
+        #############################################################################
+        ## Do QITE
+        #############################################################################
         ## compute normalization coef C=1-2*E*delta_times
         Ccoef=1-2*delta_time*Energies[t]
         Ccoefs[t]=Ccoef
